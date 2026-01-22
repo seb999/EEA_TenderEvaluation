@@ -1,9 +1,12 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
 from pathlib import Path
 import shutil
+from sqlmodel import Session, select
+from database import create_db_and_tables, get_session
+from models import Applicant
 
 # Load environment variables from .env file
 load_dotenv()
@@ -27,6 +30,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+def on_startup():
+    """Initialize database on application startup"""
+    create_db_and_tables()
+
 @app.get("/")
 async def root():
     """Root endpoint"""
@@ -46,22 +54,23 @@ async def get_model():
     }
 
 @app.get("/uploads")
-async def list_uploads():
-    """List all uploaded PDF files"""
+async def list_uploads(session: Session = Depends(get_session)):
+    """List all uploaded PDF files from database"""
     try:
-        uploads = []
-        for file_path in UPLOAD_DIR.glob("*.pdf"):
-            stat = file_path.stat()
-            uploads.append({
-                "filename": file_path.name,
-                "vendor_name": file_path.stem,
-                "file_size": stat.st_size,
-                "uploaded_at": stat.st_mtime,
-                "status": "completed"
-            })
+        statement = select(Applicant).order_by(Applicant.uploaded_at.desc())
+        applicants = session.exec(statement).all()
 
-        # Sort by upload time, most recent first
-        uploads.sort(key=lambda x: x["uploaded_at"], reverse=True)
+        uploads = []
+        for applicant in applicants:
+            uploads.append({
+                "id": applicant.id,
+                "filename": applicant.filename,
+                "vendor_name": applicant.vendor_name,
+                "file_size": applicant.file_size,
+                "uploaded_at": applicant.uploaded_at.timestamp(),
+                "status": applicant.status,
+                "evaluation_score": applicant.evaluation_score
+            })
 
         return {"uploads": uploads}
     except Exception as e:
@@ -70,7 +79,8 @@ async def list_uploads():
 @app.post("/upload")
 async def upload_pdf(
     file: UploadFile = File(...),
-    vendor_name: str = Form(...)
+    vendor_name: str = Form(...),
+    session: Session = Depends(get_session)
 ):
     """Upload a PDF file and save it with the vendor name"""
 
@@ -102,10 +112,29 @@ async def upload_pdf(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
 
+    # Save to database
+    try:
+        applicant = Applicant(
+            vendor_name=vendor_name,
+            filename=filename,
+            file_path=str(file_path),
+            file_size=file_path.stat().st_size,
+            status="uploaded"
+        )
+        session.add(applicant)
+        session.commit()
+        session.refresh(applicant)
+    except Exception as e:
+        # If database save fails, delete the uploaded file
+        if file_path.exists():
+            file_path.unlink()
+        raise HTTPException(status_code=500, detail=f"Failed to save to database: {str(e)}")
+
     return {
         "message": "File uploaded successfully",
-        "vendor_name": vendor_name,
-        "filename": filename,
-        "file_path": str(file_path),
-        "file_size": file_path.stat().st_size
+        "id": applicant.id,
+        "vendor_name": applicant.vendor_name,
+        "filename": applicant.filename,
+        "file_path": applicant.file_path,
+        "file_size": applicant.file_size
     }

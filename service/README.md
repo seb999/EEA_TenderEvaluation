@@ -81,6 +81,22 @@ venv\Scripts\python -m uvicorn main:app --reload --port 8080
 venv\Scripts\python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
+## Database
+
+The service uses SQLite database to store applicant information.
+
+### Database Location
+
+The database file is automatically created at: `service/data/tender_evaluation.db`
+
+### Migrating Existing Files
+
+If you have existing PDF files in the uploads directory, run the migration script to import them into the database:
+
+```bash
+venv\Scripts\python migrate_existing_files.py
+```
+
 ## API Endpoints
 
 ### GET `/`
@@ -101,6 +117,45 @@ Get the configured EEA LLM model.
 {
   "model": "Inhouse-LLM/gpt-oss-120b",
   "provider": "EEA In-house LLM"
+}
+```
+
+### GET `/uploads`
+List all uploaded applicants from the database.
+
+**Response:**
+```json
+{
+  "uploads": [
+    {
+      "id": 1,
+      "filename": "Vendor A.pdf",
+      "vendor_name": "Vendor A",
+      "file_size": 1024000,
+      "uploaded_at": 1769083833.60234,
+      "status": "uploaded",
+      "evaluation_score": null
+    }
+  ]
+}
+```
+
+### POST `/upload`
+Upload a PDF file with vendor name. Saves both the file and database record.
+
+**Parameters:**
+- `file`: PDF file (multipart/form-data)
+- `vendor_name`: Name of the vendor/applicant (form field)
+
+**Response:**
+```json
+{
+  "message": "File uploaded successfully",
+  "id": 1,
+  "vendor_name": "Vendor A",
+  "filename": "Vendor A.pdf",
+  "file_path": "uploads\\Vendor A.pdf",
+  "file_size": 1024000
 }
 ```
 

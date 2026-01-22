@@ -29,6 +29,10 @@ __pycache__/
 # Uploads
 service/uploads/*.pdf
 
+# Database
+service/data/
+*.db
+
 # Editor directories and files
 .idea
 .DS_Store
