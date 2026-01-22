@@ -1,0 +1,21 @@
+{
+  "recommendations": [
+    // Python
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.debugpy",
+
+    // JavaScript/TypeScript/React
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "bradlc.vscode-tailwindcss",
+
+    // General utilities
+    "christian-kohler.path-intellisense",
+    "editorconfig.editorconfig",
+    "usernamehw.errorlens",
+
+    // Environment files
+    "mikestead.dotenv"
+  ]
+}

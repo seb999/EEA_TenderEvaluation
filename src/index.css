@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root {
+  font-family: 'Public Sans', 'Segoe UI', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #2b2f3a;
+  background-color: #eef1f6;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --ink: #2b2f3a;
+  --muted: #6d7487;
+  --panel: #f7f8fb;
+  --soft: #f1f4f8;
+  --border: #d9dee7;
+  --shadow-soft: 0 20px 40px rgba(30, 45, 80, 0.08);
+  --shadow-card: 0 16px 30px rgba(30, 45, 80, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at top, #fef7ee 0%, #eef1f6 45%, #e6ecf6 100%);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+  letter-spacing: -0.01em;
+}
+
+ul {
+  padding-left: 1.2rem;
+}
