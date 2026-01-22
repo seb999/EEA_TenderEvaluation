@@ -250,6 +250,17 @@ button:active {
   color: #6a748a;
 }
 
+.queue-empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+.queue-empty p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
 .review-body {
   display: grid;
   grid-template-columns: minmax(200px, 260px) 1fr;

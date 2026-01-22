@@ -45,6 +45,28 @@ async def get_model():
         "provider": "EEA In-house LLM"
     }
 
+@app.get("/uploads")
+async def list_uploads():
+    """List all uploaded PDF files"""
+    try:
+        uploads = []
+        for file_path in UPLOAD_DIR.glob("*.pdf"):
+            stat = file_path.stat()
+            uploads.append({
+                "filename": file_path.name,
+                "vendor_name": file_path.stem,
+                "file_size": stat.st_size,
+                "uploaded_at": stat.st_mtime,
+                "status": "completed"
+            })
+
+        # Sort by upload time, most recent first
+        uploads.sort(key=lambda x: x["uploaded_at"], reverse=True)
+
+        return {"uploads": uploads}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list uploads: {str(e)}")
+
 @app.post("/upload")
 async def upload_pdf(
     file: UploadFile = File(...),

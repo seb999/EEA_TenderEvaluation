@@ -11,6 +11,25 @@ function App() {
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
   const [uploadMessage, setUploadMessage] = useState('')
   const [isDragging, setIsDragging] = useState(false)
+  const [uploads, setUploads] = useState<Array<{
+    filename: string
+    vendor_name: string
+    file_size: number
+    uploaded_at: number
+    status: string
+  }>>([])
+
+  const loadUploads = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/uploads')
+      if (response.ok) {
+        const data = await response.json()
+        setUploads(data.uploads)
+      }
+    } catch (error) {
+      console.error('Failed to load uploads:', error)
+    }
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -40,6 +59,7 @@ function App() {
     }
 
     loadModel()
+    loadUploads()
 
     return () => {
       isMounted = false
@@ -126,10 +146,19 @@ function App() {
 
       const fileInput = document.getElementById('file-input') as HTMLInputElement
       if (fileInput) fileInput.value = ''
+
+      // Refresh the uploads list
+      await loadUploads()
     } catch (error) {
       setUploadStatus('error')
       setUploadMessage(error instanceof Error ? error.message : 'Upload failed')
     }
+  }
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
   return (
@@ -199,27 +228,21 @@ function App() {
               <span>Status</span>
               <span>Actions</span>
             </div>
-            <div className="queue-row">
-              <span>Vendor A - Proposal.pdf</span>
-              <span className="pill success">Completed</span>
-              <button className="secondary" type="button">
-                Open Results
-              </button>
-            </div>
-            <div className="queue-row">
-              <span>Vendor B - Submission.pdf</span>
-              <span className="pill warning">Scoring...</span>
-              <button className="secondary ghost" type="button">
-                Open Results
-              </button>
-            </div>
-            <div className="queue-row">
-              <span>Vendor C - Bid.pdf</span>
-              <span className="pill muted">Queued...</span>
-              <button className="secondary ghost" type="button">
-                Open Results
-              </button>
-            </div>
+            {uploads.length === 0 ? (
+              <div className="queue-empty">
+                <p>No files uploaded yet</p>
+              </div>
+            ) : (
+              uploads.map((upload, index) => (
+                <div className="queue-row" key={index}>
+                  <span>{upload.vendor_name} - {upload.filename}</span>
+                  <span className="pill success">Uploaded</span>
+                  <button className="secondary ghost" type="button">
+                    View Details
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </section>
