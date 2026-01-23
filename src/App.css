@@ -477,6 +477,7 @@ button:active {
 .sidebar-list {
   display: grid;
   gap: 0.5rem;
+  margin-top: 1rem;
 }
 
 .question {
@@ -509,6 +510,13 @@ button:active {
 .callout h3 {
   margin: 0 0 0.5rem;
   font-size: 0.95rem;
+}
+
+.callout p {
+  margin: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
 }
 
 .callout ul {

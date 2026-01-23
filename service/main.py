@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 from sqlmodel import Session, select
 from data.createBlankDatabase import create_db_and_tables, get_session
-from models import Applicant, Question
+from models import Applicant, Question, ApplicantAnswer, AssessmentResult, SearchKeyword
 import json
 import openai
 import re
@@ -92,19 +92,62 @@ def _build_prompt(prompt_data: dict, answer_text: str) -> str:
         f"Candidate answer:\n{answer_text}\n"
     )
 
-def _extract_criterion_paragraph(pdf_path: Path, criterion_number: int) -> tuple[str, str] | None:
+def _extract_criterion_paragraph(pdf_path: Path, question) -> tuple[str, str] | None:
     if not pdf_path.exists():
         return None
 
-    header_pattern = re.compile(
-        rf"\b(?:Award\s+)?Criterion\s*{criterion_number}\b",
-        re.IGNORECASE
-    )
-    next_header_number = criterion_number + 1
-    next_header_pattern = re.compile(
-        rf"\b(?:Award\s+)?Criterion\s*{next_header_number}\b",
-        re.IGNORECASE
-    )
+    # Build search pattern from question configuration
+    search_label = question.search_label
+    auto_increment = question.auto_increment
+
+    # Extract number from q_id if auto_increment is enabled (e.g., "Q2" -> 2)
+    question_number = None
+    if auto_increment:
+        match = re.search(r'\d+', question.q_id)
+        if match:
+            question_number = int(match.group())
+
+    # Build regex patterns
+    header_patterns = []
+    next_header_patterns = []
+
+    if auto_increment and question_number is not None:
+        # Pattern for current number - supports both "Label Number" and "Number Label" formats
+        # Examples: "Criterion 2", "Award Criterion 2", "2. Team Management", "2 Criterion"
+        header_patterns.append(
+            # Label followed by Number: "Criterion 2"
+            re.compile(rf"\b(?:Award\s+)?{re.escape(search_label)}\s*{question_number}\b", re.IGNORECASE)
+        )
+        header_patterns.append(
+            # Number followed by Label: "2. Team Management" or "2 Team Management"
+            re.compile(rf"\b{question_number}\.?\s*{re.escape(search_label)}", re.IGNORECASE)
+        )
+
+        # Pattern for next number (to detect end of section)
+        next_number = question_number + 1
+        next_header_patterns.append(
+            # Label followed by Number: "Criterion 3"
+            re.compile(rf"\b(?:Award\s+)?{re.escape(search_label)}\s*{next_number}\b", re.IGNORECASE)
+        )
+        next_header_patterns.append(
+            # Number followed by Label: "3. Next Section" or "3 Next Section"
+            re.compile(rf"\b{next_number}\.?\s*{re.escape(search_label)}", re.IGNORECASE)
+        )
+    else:
+        # Use exact search label without numbering
+        header_patterns.append(
+            re.compile(rf"{re.escape(search_label)}", re.IGNORECASE)
+        )
+        # For non-auto-increment, we need a way to detect the next section
+        # Use a generic pattern that matches common section headers (both formats)
+        next_header_patterns.append(
+            # Label followed by Number: "Criterion 3", "Section 4"
+            re.compile(r"^(Criterion|Section|Question|Award Criterion)\s*\d+", re.IGNORECASE)
+        )
+        next_header_patterns.append(
+            # Number followed by Label: "3. ", "4. "
+            re.compile(r"^\d+\.\s+\w", re.IGNORECASE)
+        )
 
     extracted_lines = []
     header_line = None
@@ -127,13 +170,15 @@ def _extract_criterion_paragraph(pdf_path: Path, criterion_number: int) -> tuple
                     continue
 
                 if collecting:
-                    if next_header_pattern.search(trimmed) and not re.search(r"\.{4,}", trimmed):
+                    # Check if any next header pattern matches
+                    if any(pattern.search(trimmed) for pattern in next_header_patterns) and not re.search(r"\.{4,}", trimmed):
                         collecting = False
                         break
                     extracted_lines.append(line)
                     continue
 
-                if header_pattern.search(trimmed):
+                # Check if any header pattern matches
+                if any(pattern.search(trimmed) for pattern in header_patterns):
                     if re.search(r"\.{4,}", trimmed):
                         continue
                     header_line = line
@@ -144,7 +189,7 @@ def _extract_criterion_paragraph(pdf_path: Path, criterion_number: int) -> tuple
                         if not next_trimmed:
                             extracted_lines.append(next_line)
                             continue
-                        if next_header_pattern.search(next_trimmed) and not re.search(r"\.{4,}", next_trimmed):
+                        if any(pattern.search(next_trimmed) for pattern in next_header_patterns) and not re.search(r"\.{4,}", next_trimmed):
                             collecting = False
                             break
                         extracted_lines.append(next_line)
@@ -224,6 +269,55 @@ async def evaluate_answer(
     content = response.choices[0].message.content
     parsed = _extract_json_payload(content)
 
+    # Extract score and justification from parsed result
+    score = None
+    justification = None
+    if isinstance(parsed, dict):
+        score_value = parsed.get("score")
+        if isinstance(score_value, (int, float)):
+            score = float(score_value)
+        elif isinstance(score_value, str):
+            try:
+                score = float(score_value)
+            except ValueError:
+                pass
+
+        justification_value = parsed.get("justification")
+        if isinstance(justification_value, str):
+            justification = justification_value
+
+    # Save or update assessment result in AssessmentResult table
+    statement = select(AssessmentResult).where(
+        AssessmentResult.applicant_id == applicant_id,
+        AssessmentResult.q_id == q_id
+    )
+    existing_assessment = session.exec(statement).first()
+
+    if existing_assessment:
+        # Update existing assessment
+        existing_assessment.question_text = question_text
+        existing_assessment.answer_text = answer_text
+        existing_assessment.score = score
+        existing_assessment.justification = justification
+        existing_assessment.llm_response = content
+        existing_assessment.parsed_result = json.dumps(parsed, ensure_ascii=True) if parsed else None
+        existing_assessment.created_at = datetime.utcnow()
+        session.add(existing_assessment)
+    else:
+        # Create new assessment result
+        new_assessment = AssessmentResult(
+            applicant_id=applicant_id,
+            q_id=q_id,
+            question_text=question_text,
+            answer_text=answer_text,
+            score=score,
+            justification=justification,
+            llm_response=content,
+            parsed_result=json.dumps(parsed, ensure_ascii=True) if parsed else None
+        )
+        session.add(new_assessment)
+
+    # Keep existing logic for backward compatibility with Applicant.evaluation_result
     existing_result = {}
     if applicant.evaluation_result:
         try:
@@ -245,18 +339,18 @@ async def evaluate_answer(
     existing_result["evaluations"] = evaluations
     existing_result["last_updated"] = datetime.utcnow().isoformat()
 
+    # Calculate average score from all assessments
+    all_assessments = session.exec(
+        select(AssessmentResult).where(AssessmentResult.applicant_id == applicant_id)
+    ).all()
+
     scores = []
-    for entry in evaluations.values():
-        parsed_result = entry.get("parsed_result")
-        if isinstance(parsed_result, dict):
-            score_value = parsed_result.get("score")
-            if isinstance(score_value, (int, float)):
-                scores.append(float(score_value))
-            elif isinstance(score_value, str):
-                try:
-                    scores.append(float(score_value))
-                except ValueError:
-                    pass
+    for assessment in all_assessments:
+        if assessment.score is not None:
+            scores.append(assessment.score)
+        # If this is the current assessment being created and hasn't been committed yet
+        elif assessment.q_id == q_id and score is not None:
+            scores.append(score)
 
     applicant.evaluation_score = (sum(scores) / len(scores)) if scores else None
     applicant.evaluation_result = json.dumps(existing_result, ensure_ascii=True)
@@ -280,33 +374,172 @@ async def evaluate_answer(
 @app.post("/extract-answer")
 async def extract_answer_paragraph(
     applicant_id: int = Form(...),
-    criterion_number: int = Form(...),
+    q_id: str = Form(...),
     session: Session = Depends(get_session)
 ):
-    """Extract the paragraph following a Criterion header from the applicant PDF."""
+    """Extract the paragraph for a specific question from the applicant PDF."""
     applicant = session.get(Applicant, applicant_id)
     if not applicant:
         raise HTTPException(status_code=404, detail=f"Applicant {applicant_id} not found")
+
+    # Get question to retrieve search configuration
+    statement = select(Question).where(Question.q_id == q_id)
+    question = session.exec(statement).first()
+    if not question:
+        raise HTTPException(status_code=404, detail=f"Question {q_id} not found")
 
     file_path = Path(applicant.file_path)
     if not file_path.is_absolute():
         file_path = Path(__file__).resolve().parent / file_path
 
-    extracted = _extract_criterion_paragraph(file_path, criterion_number)
+    extracted = _extract_criterion_paragraph(file_path, question)
     if not extracted:
+        search_pattern = question.search_label
+        if question.auto_increment:
+            # Extract number from q_id (e.g., "Q2" -> "2")
+            match = re.search(r'\d+', q_id)
+            if match:
+                search_pattern += f" {match.group()}"
+
         raise HTTPException(
             status_code=404,
-            detail=f"Criterion {criterion_number} not found in PDF"
+            detail=f"Section '{search_pattern}' not found in PDF"
         )
 
     header, paragraph = extracted
 
     return {
         "applicant_id": applicant_id,
-        "criterion_number": criterion_number,
+        "q_id": q_id,
         "header": header,
         "paragraph": paragraph
     }
+
+@app.get("/applicant-answer/{applicant_id}/{q_id}")
+async def get_applicant_answer(
+    applicant_id: int,
+    q_id: str,
+    session: Session = Depends(get_session)
+):
+    """Get the stored answer for an applicant and question"""
+    statement = select(ApplicantAnswer).where(
+        ApplicantAnswer.applicant_id == applicant_id,
+        ApplicantAnswer.q_id == q_id
+    )
+    answer = session.exec(statement).first()
+
+    if not answer:
+        return {"answer": None}
+
+    return {
+        "answer": {
+            "id": answer.id,
+            "applicant_id": answer.applicant_id,
+            "q_id": answer.q_id,
+            "answer_text": answer.answer_text,
+            "source": answer.source,
+            "created_at": answer.created_at.isoformat(),
+            "updated_at": answer.updated_at.isoformat()
+        }
+    }
+
+@app.post("/applicant-answer")
+async def save_applicant_answer(
+    applicant_id: int = Form(...),
+    q_id: str = Form(...),
+    answer_text: str = Form(...),
+    source: str = Form("manual"),
+    session: Session = Depends(get_session)
+):
+    """Save or update an applicant's answer to a question"""
+    # Check if answer already exists
+    statement = select(ApplicantAnswer).where(
+        ApplicantAnswer.applicant_id == applicant_id,
+        ApplicantAnswer.q_id == q_id
+    )
+    existing_answer = session.exec(statement).first()
+
+    if existing_answer:
+        # Update existing answer
+        existing_answer.answer_text = answer_text
+        existing_answer.source = source
+        existing_answer.updated_at = datetime.utcnow()
+        session.add(existing_answer)
+        session.commit()
+        session.refresh(existing_answer)
+
+        return {
+            "message": "Answer updated successfully",
+            "answer": {
+                "id": existing_answer.id,
+                "applicant_id": existing_answer.applicant_id,
+                "q_id": existing_answer.q_id,
+                "answer_text": existing_answer.answer_text,
+                "source": existing_answer.source,
+                "created_at": existing_answer.created_at.isoformat(),
+                "updated_at": existing_answer.updated_at.isoformat()
+            }
+        }
+    else:
+        # Create new answer
+        new_answer = ApplicantAnswer(
+            applicant_id=applicant_id,
+            q_id=q_id,
+            answer_text=answer_text,
+            source=source
+        )
+        session.add(new_answer)
+        session.commit()
+        session.refresh(new_answer)
+
+        return {
+            "message": "Answer saved successfully",
+            "answer": {
+                "id": new_answer.id,
+                "applicant_id": new_answer.applicant_id,
+                "q_id": new_answer.q_id,
+                "answer_text": new_answer.answer_text,
+                "source": new_answer.source,
+                "created_at": new_answer.created_at.isoformat(),
+                "updated_at": new_answer.updated_at.isoformat()
+            }
+        }
+
+@app.get("/assessment-results/{applicant_id}")
+async def get_assessment_results(
+    applicant_id: int,
+    session: Session = Depends(get_session)
+):
+    """Get all assessment results for an applicant"""
+    statement = select(AssessmentResult).where(
+        AssessmentResult.applicant_id == applicant_id
+    ).order_by(AssessmentResult.q_id)
+
+    results = session.exec(statement).all()
+
+    assessment_list = []
+    for result in results:
+        parsed_obj = None
+        if result.parsed_result:
+            try:
+                parsed_obj = json.loads(result.parsed_result)
+            except json.JSONDecodeError:
+                parsed_obj = None
+
+        assessment_list.append({
+            "id": result.id,
+            "applicant_id": result.applicant_id,
+            "q_id": result.q_id,
+            "question_text": result.question_text,
+            "answer_text": result.answer_text,
+            "score": result.score,
+            "justification": result.justification,
+            "llm_response": result.llm_response,
+            "parsed_result": parsed_obj,
+            "created_at": result.created_at.isoformat()
+        })
+
+    return {"results": assessment_list}
 
 @app.get("/uploads")
 async def list_uploads(session: Session = Depends(get_session)):
@@ -446,7 +679,9 @@ async def list_questions(session: Session = Depends(get_session)):
                 "id": q.id,
                 "q_id": q.q_id,
                 "prompt_json": json.loads(q.prompt_json),
-                "is_active": q.is_active
+                "is_active": q.is_active,
+                "search_label": q.search_label,
+                "auto_increment": q.auto_increment
             })
 
         return {"questions": result}
@@ -467,7 +702,9 @@ async def get_question(q_id: str, session: Session = Depends(get_session)):
             "id": question.id,
             "q_id": question.q_id,
             "prompt_json": json.loads(question.prompt_json),
-            "is_active": question.is_active
+            "is_active": question.is_active,
+            "search_label": question.search_label,
+            "auto_increment": question.auto_increment
         }
     except HTTPException:
         raise
@@ -479,6 +716,8 @@ async def create_question(
     q_id: str = Form(...),
     prompt_json: str = Form(...),
     is_active: bool = Form(True),
+    search_label: str = Form("Criterion"),
+    auto_increment: bool = Form(True),
     session: Session = Depends(get_session)
 ):
     """Create a new evaluation question"""
@@ -499,7 +738,9 @@ async def create_question(
         question = Question(
             q_id=q_id,
             prompt_json=prompt_json,
-            is_active=is_active
+            is_active=is_active,
+            search_label=search_label,
+            auto_increment=auto_increment
         )
         session.add(question)
         session.commit()
@@ -510,7 +751,9 @@ async def create_question(
             "id": question.id,
             "q_id": question.q_id,
             "prompt_json": json.loads(question.prompt_json),
-            "is_active": question.is_active
+            "is_active": question.is_active,
+            "search_label": question.search_label,
+            "auto_increment": question.auto_increment
         }
     except HTTPException:
         raise
@@ -522,6 +765,8 @@ async def update_question(
     q_id: str,
     prompt_json: str = Form(...),
     is_active: bool = Form(True),
+    search_label: str = Form("Criterion"),
+    auto_increment: bool = Form(True),
     session: Session = Depends(get_session)
 ):
     """Update an existing evaluation question"""
@@ -541,6 +786,8 @@ async def update_question(
         # Update question
         question.prompt_json = prompt_json
         question.is_active = is_active
+        question.search_label = search_label
+        question.auto_increment = auto_increment
         session.add(question)
         session.commit()
         session.refresh(question)
@@ -550,7 +797,9 @@ async def update_question(
             "id": question.id,
             "q_id": question.q_id,
             "prompt_json": json.loads(question.prompt_json),
-            "is_active": question.is_active
+            "is_active": question.is_active,
+            "search_label": question.search_label,
+            "auto_increment": question.auto_increment
         }
     except HTTPException:
         raise
@@ -578,3 +827,112 @@ async def delete_question(q_id: str, session: Session = Depends(get_session)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete question: {str(e)}")
+
+@app.get("/search-keywords")
+async def list_search_keywords(session: Session = Depends(get_session)):
+    """List all search keywords for PDF extraction"""
+    try:
+        statement = select(SearchKeyword).order_by(SearchKeyword.keyword)
+        keywords = session.exec(statement).all()
+
+        result = []
+        for keyword in keywords:
+            result.append({
+                "id": keyword.id,
+                "keyword": keyword.keyword,
+                "is_active": keyword.is_active,
+                "created_at": keyword.created_at.isoformat()
+            })
+
+        return {"keywords": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list search keywords: {str(e)}")
+
+@app.post("/search-keywords")
+async def create_search_keyword(
+    keyword: str = Form(...),
+    is_active: bool = Form(True),
+    session: Session = Depends(get_session)
+):
+    """Create a new search keyword"""
+    try:
+        # Check if keyword already exists
+        statement = select(SearchKeyword).where(SearchKeyword.keyword == keyword)
+        existing = session.exec(statement).first()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Keyword '{keyword}' already exists")
+
+        # Create new keyword
+        new_keyword = SearchKeyword(
+            keyword=keyword,
+            is_active=is_active
+        )
+        session.add(new_keyword)
+        session.commit()
+        session.refresh(new_keyword)
+
+        return {
+            "message": "Search keyword created successfully",
+            "id": new_keyword.id,
+            "keyword": new_keyword.keyword,
+            "is_active": new_keyword.is_active,
+            "created_at": new_keyword.created_at.isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create search keyword: {str(e)}")
+
+@app.put("/search-keywords/{keyword_id}")
+async def update_search_keyword(
+    keyword_id: int,
+    keyword: str = Form(...),
+    is_active: bool = Form(True),
+    session: Session = Depends(get_session)
+):
+    """Update an existing search keyword"""
+    try:
+        # Find existing keyword
+        existing_keyword = session.get(SearchKeyword, keyword_id)
+        if not existing_keyword:
+            raise HTTPException(status_code=404, detail=f"Search keyword with id {keyword_id} not found")
+
+        # Update keyword
+        existing_keyword.keyword = keyword
+        existing_keyword.is_active = is_active
+        session.add(existing_keyword)
+        session.commit()
+        session.refresh(existing_keyword)
+
+        return {
+            "message": "Search keyword updated successfully",
+            "id": existing_keyword.id,
+            "keyword": existing_keyword.keyword,
+            "is_active": existing_keyword.is_active,
+            "created_at": existing_keyword.created_at.isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update search keyword: {str(e)}")
+
+@app.delete("/search-keywords/{keyword_id}")
+async def delete_search_keyword(keyword_id: int, session: Session = Depends(get_session)):
+    """Delete a search keyword"""
+    try:
+        # Find existing keyword
+        keyword = session.get(SearchKeyword, keyword_id)
+        if not keyword:
+            raise HTTPException(status_code=404, detail=f"Search keyword with id {keyword_id} not found")
+
+        # Delete keyword
+        session.delete(keyword)
+        session.commit()
+
+        return {
+            "message": f"Search keyword '{keyword.keyword}' deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete search keyword: {str(e)}")

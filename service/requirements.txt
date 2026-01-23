@@ -6,3 +6,4 @@ openai
 pymupdf
 pypdf
 debugpy
+alembic

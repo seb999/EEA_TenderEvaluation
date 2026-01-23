@@ -39,6 +39,10 @@ class Question(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     is_active: bool = Field(default=True)  # To enable/disable questions
 
+    # PDF search configuration
+    search_label: str = Field(default="Criterion")  # Label to search in PDF (e.g., "Criterion", "Section")
+    auto_increment: bool = Field(default=True)  # If true, appends question number to search_label
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -49,6 +53,73 @@ class Question(SQLModel, table=True):
                     "required_evidence": ["team structure", "governance"],
                     "evaluation_guidance": ["Score higher for specific answers"],
                     "output_format": {"score": "integer 0-5", "justification": "text"}
-                }
+                },
+                "search_label": "Criterion",
+                "auto_increment": True
+            }
+        }
+
+
+class ApplicantAnswer(SQLModel, table=True):
+    """Stores applicant answers to specific questions"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    applicant_id: int = Field(foreign_key="applicant.id", index=True)
+    q_id: str = Field(index=True)  # Question ID (e.g., "Q2")
+    answer_text: str  # The actual answer content
+    source: str = Field(default="extracted")  # "extracted" or "manual"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "applicant_id": 1,
+                "q_id": "Q2",
+                "answer_text": "Our team is organized with...",
+                "source": "extracted"
+            }
+        }
+
+
+class AssessmentResult(SQLModel, table=True):
+    """Stores LLM assessment results for applicant answers"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    applicant_id: int = Field(foreign_key="applicant.id", index=True)
+    q_id: str = Field(index=True)  # Question ID (e.g., "Q2")
+    question_text: str  # The actual question text
+    answer_text: str  # The answer that was evaluated
+    score: Optional[float] = None  # Numeric score extracted from LLM response
+    justification: Optional[str] = None  # Justification text from LLM
+    llm_response: str  # Full raw LLM response
+    parsed_result: Optional[str] = None  # JSON string of parsed LLM response
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "applicant_id": 1,
+                "q_id": "Q2",
+                "question_text": "Explain how you organise your team...",
+                "answer_text": "Our team is organized with...",
+                "score": 4.5,
+                "justification": "The response demonstrates...",
+                "llm_response": "{\"score\": 4.5, \"justification\": \"...\"}",
+                "parsed_result": "{\"score\": 4.5, \"justification\": \"...\"}"
+            }
+        }
+
+
+class SearchKeyword(SQLModel, table=True):
+    """Stores configurable search keywords for PDF extraction"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    keyword: str = Field(index=True)  # e.g., "Criterion", "Award Criterion", "Section"
+    is_active: bool = Field(default=True)  # Enable/disable keywords
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "keyword": "Criterion",
+                "is_active": True
             }
         }

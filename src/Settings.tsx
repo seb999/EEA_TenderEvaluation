@@ -12,6 +12,15 @@ interface Question {
     output_format: Record<string, string>
   }
   is_active: boolean
+  search_label: string
+  auto_increment: boolean
+}
+
+interface SearchKeyword {
+  id: number
+  keyword: string
+  is_active: boolean
+  created_at: string
 }
 
 function Settings() {
@@ -20,7 +29,14 @@ function Settings() {
   const [isCreating, setIsCreating] = useState(false)
   const [newQId, setNewQId] = useState('')
   const [jsonText, setJsonText] = useState('')
+  const [searchLabel, setSearchLabel] = useState('Criterion')
+  const [autoIncrement, setAutoIncrement] = useState(true)
   const [message, setMessage] = useState<{text: string, type: 'success' | 'error'} | null>(null)
+
+  const [keywords, setKeywords] = useState<SearchKeyword[]>([])
+  const [newKeyword, setNewKeyword] = useState('')
+  const [editingKeywordId, setEditingKeywordId] = useState<number | null>(null)
+  const [editingKeywordText, setEditingKeywordText] = useState('')
 
   const loadQuestions = async () => {
     try {
@@ -34,13 +50,28 @@ function Settings() {
     }
   }
 
+  const loadKeywords = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/search-keywords')
+      if (response.ok) {
+        const data = await response.json()
+        setKeywords(data.keywords)
+      }
+    } catch (error) {
+      console.error('Failed to load keywords:', error)
+    }
+  }
+
   useEffect(() => {
     loadQuestions()
+    loadKeywords()
   }, [])
 
   const handleEdit = (question: Question) => {
     setEditingQuestion(question)
     setJsonText(JSON.stringify(question.prompt_json, null, 2))
+    setSearchLabel(question.search_label || 'Criterion')
+    setAutoIncrement(question.auto_increment !== undefined ? question.auto_increment : true)
     setIsCreating(false)
   }
 
@@ -48,6 +79,8 @@ function Settings() {
     setIsCreating(true)
     setEditingQuestion(null)
     setNewQId('')
+    setSearchLabel('Criterion')
+    setAutoIncrement(true)
     setJsonText(JSON.stringify({
       question: "",
       scale: "0-5",
@@ -65,6 +98,8 @@ function Settings() {
     setIsCreating(false)
     setJsonText('')
     setNewQId('')
+    setSearchLabel('Criterion')
+    setAutoIncrement(true)
     setMessage(null)
   }
 
@@ -80,6 +115,8 @@ function Settings() {
     const formData = new FormData()
     formData.append('prompt_json', jsonText)
     formData.append('is_active', 'true')
+    formData.append('search_label', searchLabel.trim() || 'Criterion')
+    formData.append('auto_increment', String(autoIncrement))
 
     try {
       let response
@@ -138,6 +175,100 @@ function Settings() {
     }
   }
 
+  const handleCreateKeyword = async () => {
+    if (!newKeyword.trim()) {
+      setMessage({text: 'Keyword cannot be empty', type: 'error'})
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('keyword', newKeyword.trim())
+    formData.append('is_active', 'true')
+
+    try {
+      const response = await fetch('http://localhost:8000/search-keywords', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (response.ok) {
+        setMessage({text: 'Keyword created successfully', type: 'success'})
+        setNewKeyword('')
+        await loadKeywords()
+        setTimeout(() => setMessage(null), 3000)
+      } else {
+        const error = await response.json()
+        setMessage({text: error?.detail || 'Failed to create keyword', type: 'error'})
+      }
+    } catch (error) {
+      setMessage({text: error instanceof Error ? error.message : 'Failed to create keyword', type: 'error'})
+    }
+  }
+
+  const handleUpdateKeyword = async (id: number) => {
+    if (!editingKeywordText.trim()) {
+      setMessage({text: 'Keyword cannot be empty', type: 'error'})
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('keyword', editingKeywordText.trim())
+    formData.append('is_active', 'true')
+
+    try {
+      const response = await fetch(`http://localhost:8000/search-keywords/${id}`, {
+        method: 'PUT',
+        body: formData,
+      })
+
+      if (response.ok) {
+        setMessage({text: 'Keyword updated successfully', type: 'success'})
+        setEditingKeywordId(null)
+        setEditingKeywordText('')
+        await loadKeywords()
+        setTimeout(() => setMessage(null), 3000)
+      } else {
+        const error = await response.json()
+        setMessage({text: error?.detail || 'Failed to update keyword', type: 'error'})
+      }
+    } catch (error) {
+      setMessage({text: error instanceof Error ? error.message : 'Failed to update keyword', type: 'error'})
+    }
+  }
+
+  const handleDeleteKeyword = async (id: number, keyword: string) => {
+    if (!confirm(`Are you sure you want to delete keyword "${keyword}"?`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8000/search-keywords/${id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        setMessage({text: 'Keyword deleted successfully', type: 'success'})
+        await loadKeywords()
+        setTimeout(() => setMessage(null), 3000)
+      } else {
+        const error = await response.json()
+        setMessage({text: error?.detail || 'Failed to delete keyword', type: 'error'})
+      }
+    } catch (error) {
+      setMessage({text: error instanceof Error ? error.message : 'Failed to delete keyword', type: 'error'})
+    }
+  }
+
+  const handleEditKeyword = (keyword: SearchKeyword) => {
+    setEditingKeywordId(keyword.id)
+    setEditingKeywordText(keyword.keyword)
+  }
+
+  const handleCancelEditKeyword = () => {
+    setEditingKeywordId(null)
+    setEditingKeywordText('')
+  }
+
   return (
     <div className="settings-container">
       <div className="settings-header">
@@ -166,6 +297,30 @@ function Settings() {
               />
             </label>
           )}
+          <label className="field">
+            <span>PDF Search Label</span>
+            <input
+              placeholder="e.g., Criterion, Section, Award Criterion"
+              value={searchLabel}
+              onChange={(e) => setSearchLabel(e.target.value)}
+            />
+            <small style={{ color: 'var(--muted)', marginTop: '0.25rem' }}>
+              The keyword to search for in PDF files
+            </small>
+          </label>
+          <label className="field" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <input
+              type="checkbox"
+              checked={autoIncrement}
+              onChange={(e) => setAutoIncrement(e.target.checked)}
+            />
+            <span>Auto-increment with question number</span>
+            <small style={{ color: 'var(--muted)', marginLeft: '0.5rem' }}>
+              {autoIncrement
+                ? `Will search for "${searchLabel} ${newQId.match(/\d+/)?.[0] || editingQuestion?.q_id.match(/\d+/)?.[0] || 'X'}" or "${newQId.match(/\d+/)?.[0] || editingQuestion?.q_id.match(/\d+/)?.[0] || 'X'}. ${searchLabel}" in PDF`
+                : `Will search for exact text "${searchLabel}"`}
+            </small>
+          </label>
           <label className="field">
             <span>Prompt JSON</span>
             <textarea
@@ -213,6 +368,109 @@ function Settings() {
                     Delete
                   </button>
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>PDF Search Keywords</h2>
+        <p style={{ marginBottom: '1rem', color: 'var(--muted)' }}>
+          Configure keywords used to search for sections in PDF files. The system will look for these keywords followed by a number (e.g., "Criterion 2").
+        </p>
+
+        <div style={{ marginBottom: '1.5rem' }}>
+          <label className="field">
+            <span>Add New Keyword</span>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <input
+                placeholder="e.g., Criterion, Section, Award Criterion"
+                value={newKeyword}
+                onChange={(e) => setNewKeyword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleCreateKeyword()
+                  }
+                }}
+              />
+              <button className="primary" onClick={handleCreateKeyword}>
+                Add
+              </button>
+            </div>
+          </label>
+        </div>
+
+        {keywords.length === 0 ? (
+          <p>No keywords configured. The system will use default keywords: "Criterion", "Award Criterion".</p>
+        ) : (
+          <div style={{ display: 'grid', gap: '0.5rem' }}>
+            {keywords.map((keyword) => (
+              <div
+                key={keyword.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0.75rem',
+                  background: 'var(--soft)',
+                  borderRadius: '8px',
+                }}
+              >
+                {editingKeywordId === keyword.id ? (
+                  <>
+                    <input
+                      value={editingKeywordText}
+                      onChange={(e) => setEditingKeywordText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleUpdateKeyword(keyword.id)
+                        } else if (e.key === 'Escape') {
+                          handleCancelEditKeyword()
+                        }
+                      }}
+                      style={{ flex: 1, marginRight: '0.5rem' }}
+                      autoFocus
+                    />
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        className="secondary"
+                        onClick={() => handleUpdateKeyword(keyword.id)}
+                      >
+                        Save
+                      </button>
+                      <button
+                        className="secondary ghost"
+                        onClick={handleCancelEditKeyword}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <span style={{ fontWeight: 500 }}>{keyword.keyword}</span>
+                      <span className={`pill ${keyword.is_active ? 'success' : 'secondary'}`}>
+                        {keyword.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        className="secondary"
+                        onClick={() => handleEditKeyword(keyword)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="secondary ghost"
+                        onClick={() => handleDeleteKeyword(keyword.id, keyword.keyword)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>

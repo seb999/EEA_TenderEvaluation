@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import Settings from './Settings'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faGear, faTrash, faWandMagicSparkles } from '@fortawesome/free-solid-svg-icons'
+import { faGear, faTrash, faWandMagicSparkles, faInfoCircle } from '@fortawesome/free-solid-svg-icons'
 
 type View = 'main' | 'settings'
 
@@ -50,6 +50,19 @@ function App() {
   const [evaluateExtractError, setEvaluateExtractError] = useState('')
   const [selectedApplicantId, setSelectedApplicantId] = useState<number | null>(null)
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null)
+  const [showWorkflowInfo, setShowWorkflowInfo] = useState(false)
+  const [assessmentResults, setAssessmentResults] = useState<Array<{
+    id: number
+    applicant_id: number
+    q_id: string
+    question_text: string
+    answer_text: string
+    score: number | null
+    justification: string | null
+    llm_response: string
+    parsed_result: unknown
+    created_at: string
+  }>>([])
 
   const loadUploads = async () => {
     try {
@@ -97,18 +110,28 @@ function App() {
   }
 
   const fetchCriterionAnswer = async (applicantId: number, qId: string) => {
-    const match = qId.match(/\d+/)
-    if (!match) {
-      return
-    }
-
-    const formData = new FormData()
-    formData.append('applicant_id', String(applicantId))
-    formData.append('criterion_number', match[0])
-
     try {
       setEvaluateExtractError('')
       setEvaluateExtracting(true)
+
+      // First, check if answer is already in database
+      const dbResponse = await fetch(`http://localhost:8000/applicant-answer/${applicantId}/${qId}`)
+
+      if (dbResponse.ok) {
+        const dbData = await dbResponse.json()
+        if (dbData.answer && dbData.answer.answer_text) {
+          // Answer found in database, use it
+          setEvaluateAnswer(dbData.answer.answer_text)
+          setEvaluateExtracting(false)
+          return
+        }
+      }
+
+      // No answer in database, extract from PDF
+      const formData = new FormData()
+      formData.append('applicant_id', String(applicantId))
+      formData.append('q_id', qId)
+
       const response = await fetch('http://localhost:8000/extract-answer', {
         method: 'POST',
         body: formData,
@@ -124,15 +147,48 @@ function App() {
       const data = await response.json()
       if (data?.paragraph) {
         setEvaluateAnswer(data.paragraph)
+
+        // Save extracted answer to database
+        const saveFormData = new FormData()
+        saveFormData.append('applicant_id', String(applicantId))
+        saveFormData.append('q_id', qId)
+        saveFormData.append('answer_text', data.paragraph)
+        saveFormData.append('source', 'extracted')
+
+        await fetch('http://localhost:8000/applicant-answer', {
+          method: 'POST',
+          body: saveFormData,
+        })
       } else {
-        setEvaluateExtractError('No paragraph found for this criterion.')
+        setEvaluateExtractError('No matching section found in PDF.')
         setEvaluateAnswer('')
       }
     } catch (error) {
-      console.error('Failed to extract answer:', error)
-      setEvaluateExtractError('Failed to extract answer')
+      console.error('Failed to fetch/extract answer:', error)
+      setEvaluateExtractError('Failed to fetch/extract answer')
     } finally {
       setEvaluateExtracting(false)
+    }
+  }
+
+  const saveApplicantAnswer = async (applicantId: number, qId: string, answerText: string) => {
+    if (!answerText.trim() || !qId) {
+      return
+    }
+
+    try {
+      const formData = new FormData()
+      formData.append('applicant_id', String(applicantId))
+      formData.append('q_id', qId)
+      formData.append('answer_text', answerText)
+      formData.append('source', 'manual')
+
+      await fetch('http://localhost:8000/applicant-answer', {
+        method: 'POST',
+        body: formData,
+      })
+    } catch (error) {
+      console.error('Failed to save answer:', error)
     }
   }
 
@@ -150,6 +206,21 @@ function App() {
       return
     }
     setIsEvaluateOpen(false)
+  }
+
+  const loadAssessmentResults = async (applicantId: number) => {
+    try {
+      const response = await fetch(`http://localhost:8000/assessment-results/${applicantId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setAssessmentResults(data.results || [])
+      } else {
+        setAssessmentResults([])
+      }
+    } catch (error) {
+      console.error('Failed to load assessment results:', error)
+      setAssessmentResults([])
+    }
   }
 
   const handleRunEvaluation = async () => {
@@ -175,14 +246,19 @@ function App() {
         throw new Error(error.detail || 'Evaluation failed')
       }
 
-      const data = await response.json()
-      alert(
-        data.parsed_result
-          ? JSON.stringify(data.parsed_result, null, 2)
-          : data.llm_response,
-      )
+      await response.json()
+
+      // Refresh uploads to get latest data
       await loadUploads()
+
+      // Reload assessment results for this applicant
+      await loadAssessmentResults(evaluateApplicantId)
+
+      // Select this applicant and question to show results
       setSelectedApplicantId(evaluateApplicantId)
+      setSelectedQuestionId(evaluateQuestion)
+
+      // Close the modal
       setIsEvaluateOpen(false)
     } catch (error) {
       alert(
@@ -248,35 +324,32 @@ function App() {
     }
   }, [uploads, selectedApplicantId])
 
+  useEffect(() => {
+    if (selectedApplicantId) {
+      loadAssessmentResults(selectedApplicantId)
+    } else {
+      setAssessmentResults([])
+    }
+  }, [selectedApplicantId])
+
   const selectedApplicant = uploads.find((upload) => upload.id === selectedApplicantId) ?? null
-  const evaluationMap = selectedApplicant?.evaluation_result?.evaluations ?? {}
-  const evaluationIds = Object.keys(evaluationMap)
 
   useEffect(() => {
-    if (!evaluationIds.length) {
+    if (!assessmentResults.length) {
       setSelectedQuestionId(null)
       return
     }
-    if (!selectedQuestionId || !evaluationMap[selectedQuestionId]) {
-      setSelectedQuestionId(evaluationIds[0])
+    if (!selectedQuestionId || !assessmentResults.some(r => r.q_id === selectedQuestionId)) {
+      setSelectedQuestionId(assessmentResults[0].q_id)
     }
-  }, [selectedApplicantId, selectedQuestionId, evaluationIds.join('|')])
+  }, [selectedApplicantId, selectedQuestionId, assessmentResults])
 
-  const selectedEvaluation = selectedQuestionId ? evaluationMap[selectedQuestionId] : null
-  const parsedResult = selectedEvaluation?.parsed_result
-  const parsedObject =
-    parsedResult && typeof parsedResult === 'object' && !Array.isArray(parsedResult)
-      ? (parsedResult as Record<string, unknown>)
-      : null
-  const scoreValue = parsedObject?.score
-  const scoreLabel =
-    typeof scoreValue === 'number' || typeof scoreValue === 'string'
-      ? `${scoreValue}`
-      : 'N/A'
-  const justification =
-    parsedObject?.justification ??
-    parsedObject?.summary ??
-    (typeof parsedResult === 'string' ? parsedResult : '')
+  const selectedAssessment = assessmentResults.find(r => r.q_id === selectedQuestionId) ?? null
+  const scoreLabel = selectedAssessment?.score !== null && selectedAssessment?.score !== undefined
+    ? `${selectedAssessment.score}`
+    : 'N/A'
+  const justification = selectedAssessment?.justification ?? ''
+  const parsedResult = selectedAssessment?.parsed_result ?? null
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -365,12 +438,6 @@ function App() {
       setUploadStatus('error')
       setUploadMessage(error instanceof Error ? error.message : 'Upload failed')
     }
-  }
-
-  const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
   if (currentView === 'settings') {
@@ -509,16 +576,54 @@ function App() {
                 <p className="eyebrow">LLM Assessment</p>
                 <h2>Evaluate {evaluateVendor}</h2>
               </div>
-              <button
-                className="icon-button"
-                type="button"
-                onClick={handleCloseEvaluate}
-                aria-label="Close"
-              >
-                ×
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={() => setShowWorkflowInfo(!showWorkflowInfo)}
+                  aria-label="Workflow Info"
+                  title="Show workflow information"
+                >
+                  <FontAwesomeIcon icon={faInfoCircle} />
+                </button>
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={handleCloseEvaluate}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
             </header>
             <div className="modal-body">
+              {showWorkflowInfo && (
+                <div style={{
+                  backgroundColor: '#f0f7ff',
+                  border: '1px solid #0066cc',
+                  borderRadius: '6px',
+                  padding: '16px',
+                  marginBottom: '16px'
+                }}>
+                  <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '14px', fontWeight: 600, color: '#0066cc' }}>
+                    Answer Workflow
+                  </h3>
+                  <ol style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', lineHeight: '1.6' }}>
+                    <li>
+                      <strong>Select a question:</strong> When you choose a question, the system automatically checks if an answer has been previously stored.
+                    </li>
+                    <li>
+                      <strong>Auto-extraction:</strong> If no stored answer exists, the system extracts the relevant section from the PDF and saves it to the database.
+                    </li>
+                    <li>
+                      <strong>Manual override:</strong> You can edit or paste your own answer directly into the textarea. Changes are automatically saved when you click outside the field.
+                    </li>
+                    <li>
+                      <strong>Persistence:</strong> Once saved, the answer will be loaded instantly on future visits - no need to re-extract from the PDF.
+                    </li>
+                  </ol>
+                </div>
+              )}
               <label className="field">
                 <span>Question</span>
                 <select
@@ -549,6 +654,11 @@ function App() {
                   className="modal-textarea"
                   value={evaluateAnswer}
                   onChange={(event) => setEvaluateAnswer(event.target.value)}
+                  onBlur={() => {
+                    if (evaluateApplicantId && evaluateQuestion && evaluateAnswer) {
+                      saveApplicantAnswer(evaluateApplicantId, evaluateQuestion, evaluateAnswer)
+                    }
+                  }}
                   placeholder="Paste the answer from the proposal"
                   rows={10}
                 />
@@ -608,50 +718,43 @@ function App() {
               <button className="secondary" type="button">
                 Export JSON
               </button>
-            </div>
-            <div className="sidebar-list">
-              {evaluationIds.length === 0 ? (
-                <div className="question">No assessments yet</div>
-              ) : (
-                evaluationIds.map((questionId) => {
-                  const entry = evaluationMap[questionId]
-                  const entryParsed = entry?.parsed_result
-                  const entryObject =
-                    entryParsed && typeof entryParsed === 'object' && !Array.isArray(entryParsed)
-                      ? (entryParsed as Record<string, unknown>)
-                      : null
-                  const entryScore = entryObject?.score
-                  const entryScoreLabel =
-                    typeof entryScore === 'number' || typeof entryScore === 'string'
-                      ? entryScore
-                      : 'N/A'
+              <div className="sidebar-list">
+                {assessmentResults.length === 0 ? (
+                  <div className="question">No assessments yet</div>
+                ) : (
+                  assessmentResults.map((assessment) => {
+                    const entryScoreLabel: string | number =
+                      assessment.score !== null && assessment.score !== undefined
+                        ? assessment.score
+                        : 'N/A'
 
-                  return (
-                    <button
-                      key={questionId}
-                      className={`question ${questionId === selectedQuestionId ? 'active' : ''}`}
-                      type="button"
-                      onClick={() => setSelectedQuestionId(questionId)}
-                    >
-                      {questionId} <span>{entryScoreLabel}</span>
-                    </button>
-                  )
-                })
-              )}
+                    return (
+                      <button
+                        key={assessment.q_id}
+                        className={`question ${assessment.q_id === selectedQuestionId ? 'active' : ''}`}
+                        type="button"
+                        onClick={() => setSelectedQuestionId(assessment.q_id)}
+                      >
+                        {assessment.q_id} <span>{entryScoreLabel}</span>
+                      </button>
+                    )
+                  })
+                )}
+              </div>
             </div>
           </aside>
 
           <main className="review-main">
             <div className="card">
               {selectedApplicant ? (
-                evaluationIds.length ? (
+                assessmentResults.length ? (
                   <>
                     <h2>
-                      {selectedQuestionId}: <span>{selectedEvaluation?.question_text || 'Question'}</span>
+                      {selectedQuestionId}: <span>{selectedAssessment?.question_text || 'Question'}</span>
                     </h2>
                     <div className="callout">
                       <h3>Extracted Answer</h3>
-                      <p>{selectedEvaluation?.answer_text || 'No answer stored.'}</p>
+                      <p>{selectedAssessment?.answer_text || 'No answer stored.'}</p>
                     </div>
                     <div className="assessment">
                       <div className="assessment-title">
