@@ -32,6 +32,7 @@ service/uploads/*.pdf
 # Database
 service/data/
 *.db
+!service/data/questions_seed.json
 
 # Editor directories and files
 .idea

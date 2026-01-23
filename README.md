@@ -21,6 +21,13 @@ Endpoints:
 Notes:
 - Backend reads environment from `service/.env`.
 - To rebuild after changes, rerun `docker compose build`.
+- The question seed file is `service/data/questions_seed.json`.
+
+Import questions into a blank DB:
+
+```bash
+python service/data/import_questions.py service/data/questions_seed.json
+```
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
