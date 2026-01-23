@@ -480,22 +480,27 @@ button:active {
   display: grid;
   gap: 0.5rem;
   margin-top: 1rem;
+  justify-items: end;
 }
 
 .question {
-  background: #fff;
-  color: var(--ink);
+  background: rgba(30, 91, 143, 0.08);
+  color: #1e5b8f;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-radius: 10px;
-  padding: 0.75rem;
-  border: 1px solid rgba(30, 91, 143, 0.1);
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  font-weight: 600;
+  width: fit-content;
 }
 
 .question.active {
-  background: #1e5b8f;
-  color: #fff;
+  background: rgba(30, 91, 143, 0.08);
+  color: #1e5b8f;
+  border-color: rgba(30, 91, 143, 0.35);
+  box-shadow: inset 3px 0 0 #1e5b8f;
 }
 
 .review-main .card {
@@ -540,6 +545,27 @@ button:active {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.score-highlight {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(30, 91, 143, 0.08);
+  color: #1e5b8f;
+  font-weight: 600;
+  font-size: 0.8rem;
+  width: fit-content;
+}
+
+.score-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.65rem;
+  color: #1e5b8f;
 }
 
 .score-badge {

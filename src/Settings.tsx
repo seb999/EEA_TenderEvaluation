@@ -146,6 +146,23 @@ function Settings() {
           setMessage({text: 'Question ID is required', type: 'error'})
           return
         }
+        const normalizedId = newQId.trim()
+        const normalizedUpper = normalizedId.toUpperCase()
+        const hasDuplicate = questions.some((question) => {
+          const existing = question.q_id.trim()
+          const existingUpper = existing.toUpperCase()
+          if (existingUpper === normalizedUpper) {
+            return true
+          }
+          if (/^\d+$/.test(normalizedId) && existingUpper === `Q${normalizedUpper}`) {
+            return true
+          }
+          return false
+        })
+        if (hasDuplicate) {
+          setMessage({text: 'Question ID already exists', type: 'error'})
+          return
+        }
         formData.append('q_id', newQId.trim())
         response = await fetch('http://localhost:8000/questions', {
           method: 'POST',
@@ -338,7 +355,7 @@ function Settings() {
             <label className="field">
               <span>Question ID</span>
               <input
-                placeholder="e.g., Q2, Q3"
+                placeholder="e.g., 1, 2"
                 value={newQId}
                 onChange={(e) => setNewQId(e.target.value)}
               />

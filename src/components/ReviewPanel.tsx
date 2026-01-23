@@ -45,7 +45,6 @@ function ReviewPanel({
               >
                 {selectedApplicant?.status ?? 'Not evaluated'}
               </span>
-              <span className="score">Overall Score: {selectedApplicant?.evaluation_score ?? 'N/A'}</span>
             </div>
             <button className="secondary" type="button">
               Re-run Evaluation
@@ -57,23 +56,29 @@ function ReviewPanel({
               {assessmentResults.length === 0 ? (
                 <div className="question">No assessments yet</div>
               ) : (
-                assessmentResults.map((assessment) => {
-                  const entryScoreLabel =
-                    assessment.score !== null && assessment.score !== undefined
-                      ? assessment.score
-                      : 'N/A'
+                [...assessmentResults]
+                  .sort((a, b) => {
+                    const aNum = Number(a.q_id.match(/\d+/)?.[0] ?? Number.MAX_SAFE_INTEGER)
+                    const bNum = Number(b.q_id.match(/\d+/)?.[0] ?? Number.MAX_SAFE_INTEGER)
+                    if (aNum !== bNum) {
+                      return aNum - bNum
+                    }
+                    return a.q_id.localeCompare(b.q_id)
+                  })
+                  .map((assessment) => {
+                    const labelNumber = assessment.q_id.match(/\d+/)?.[0] ?? assessment.q_id
 
-                  return (
-                    <button
-                      key={assessment.q_id}
-                      className={`question ${assessment.q_id === selectedQuestionId ? 'active' : ''}`}
-                      type="button"
-                      onClick={() => onSelectQuestion(assessment.q_id)}
-                    >
-                      {assessment.q_id} <span>{entryScoreLabel}</span>
-                    </button>
-                  )
-                })
+                    return (
+                      <button
+                        key={assessment.q_id}
+                        className={`question ${assessment.q_id === selectedQuestionId ? 'active' : ''}`}
+                        type="button"
+                        onClick={() => onSelectQuestion(assessment.q_id)}
+                      >
+                        Question {labelNumber}
+                      </button>
+                    )
+                  })
               )}
             </div>
           </div>
@@ -87,6 +92,10 @@ function ReviewPanel({
                   <h2>
                     {selectedQuestionId}: <span>{selectedAssessment?.question_text || 'Question'}</span>
                   </h2>
+                  <div className="score-highlight">
+                    <span className="score-label">Question score</span>
+                    <span className="score-badge">{scoreLabel}</span>
+                  </div>
                   <div className="callout">
                     <h3>Extracted Answer</h3>
                     <p>{selectedAssessment?.answer_text || 'No answer stored.'}</p>
