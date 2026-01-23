@@ -23,6 +23,8 @@ interface SearchKeyword {
   created_at: string
 }
 
+type LlmProvider = 'eea' | 'openai'
+
 function Settings() {
   const [questions, setQuestions] = useState<Question[]>([])
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
@@ -32,6 +34,10 @@ function Settings() {
   const [searchLabel, setSearchLabel] = useState('Criterion')
   const [autoIncrement, setAutoIncrement] = useState(true)
   const [message, setMessage] = useState<{text: string, type: 'success' | 'error'} | null>(null)
+  const [llmProvider, setLlmProvider] = useState<LlmProvider>('eea')
+  const [llmModel, setLlmModel] = useState('')
+  const [llmSupportsImages, setLlmSupportsImages] = useState(false)
+  const [llmSaving, setLlmSaving] = useState(false)
 
   const [keywords, setKeywords] = useState<SearchKeyword[]>([])
   const [newKeyword, setNewKeyword] = useState('')
@@ -62,9 +68,24 @@ function Settings() {
     }
   }
 
+  const loadLlmConfig = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/llm-config')
+      if (response.ok) {
+        const data = await response.json()
+        setLlmProvider(data.provider || 'eea')
+        setLlmModel(data.model || '')
+        setLlmSupportsImages(Boolean(data.supports_images))
+      }
+    } catch (error) {
+      console.error('Failed to load LLM config:', error)
+    }
+  }
+
   useEffect(() => {
     loadQuestions()
     loadKeywords()
+    loadLlmConfig()
   }, [])
 
   const handleEdit = (question: Question) => {
@@ -269,6 +290,32 @@ function Settings() {
     setEditingKeywordText('')
   }
 
+  const handleSaveLlmConfig = async () => {
+    setLlmSaving(true)
+    const formData = new FormData()
+    formData.append('provider', llmProvider)
+
+    try {
+      const response = await fetch('http://localhost:8000/llm-config', {
+        method: 'PUT',
+        body: formData,
+      })
+
+      if (response.ok) {
+        setMessage({text: 'LLM provider updated successfully', type: 'success'})
+        await loadLlmConfig()
+        setTimeout(() => setMessage(null), 3000)
+      } else {
+        const error = await response.json()
+        setMessage({text: error?.detail || 'Failed to update LLM provider', type: 'error'})
+      }
+    } catch (error) {
+      setMessage({text: error instanceof Error ? error.message : 'Failed to update LLM provider', type: 'error'})
+    } finally {
+      setLlmSaving(false)
+    }
+  }
+
   return (
     <div className="settings-container">
       <div className="settings-header">
@@ -341,6 +388,29 @@ function Settings() {
         </div>
       )}
 
+      <div className="card">
+        <h2>LLM Provider</h2>
+        <label className="field">
+          <span>Choose provider</span>
+          <select
+            value={llmProvider}
+            onChange={(e) => setLlmProvider(e.target.value as LlmProvider)}
+          >
+            <option value="eea">EEA In-house LLM (default)</option>
+            <option value="openai">OpenAI</option>
+          </select>
+        </label>
+        <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.85rem' }}>
+          Current model: {llmModel || 'Unknown'}
+          {llmSupportsImages ? ' · Supports images' : ' · No image support'}
+        </p>
+        <div className="button-group">
+          <button className="primary" onClick={handleSaveLlmConfig} disabled={llmSaving}>
+            {llmSaving ? 'Saving...' : 'Save provider'}
+          </button>
+        </div>
+      </div>
+
       <div className="card questions-list">
         <h2>Current Questions</h2>
         {questions.length === 0 ? (
@@ -380,7 +450,7 @@ function Settings() {
       </div>
 
       <div className="card">
-        <h2>PDF Search Keywords</h2>
+        <h2>Default Search Keywords</h2>
         <p style={{ marginBottom: '1rem', color: 'var(--muted)' }}>
           Configure keywords used to search for sections in PDF files. The system will look for these keywords followed by a number (e.g., "Criterion 2").
         </p>

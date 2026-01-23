@@ -1,4 +1,4 @@
-import { ChangeEvent } from 'react'
+import type { ChangeEvent } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faInfoCircle } from '@fortawesome/free-solid-svg-icons'
 import type { Question } from '../types'
@@ -8,15 +8,18 @@ type EvaluateModalProps = {
   questions: Question[]
   evaluateQuestion: string
   evaluateAnswer: string
+  evaluateImage: File | null
   evaluateStatus: 'idle' | 'loading'
   evaluateExtracting: boolean
   evaluateExtractError: string
+  supportsImages: boolean
   showWorkflowInfo: boolean
   onToggleWorkflowInfo: () => void
   onClose: () => void
   onQuestionChange: (value: string) => void
   onAnswerChange: (value: string) => void
   onAnswerBlur: () => void
+  onImageChange: (file: File | null) => void
   onRunEvaluation: () => void
 }
 
@@ -25,15 +28,18 @@ function EvaluateModal({
   questions,
   evaluateQuestion,
   evaluateAnswer,
+  evaluateImage,
   evaluateStatus,
   evaluateExtracting,
   evaluateExtractError,
+  supportsImages,
   showWorkflowInfo,
   onToggleWorkflowInfo,
   onClose,
   onQuestionChange,
   onAnswerChange,
   onAnswerBlur,
+  onImageChange,
   onRunEvaluation,
 }: EvaluateModalProps) {
   return (
@@ -122,6 +128,28 @@ function EvaluateModal({
             />
             {evaluateExtracting && <p className="upload-message uploading">Extracting proposal answer...</p>}
             {evaluateExtractError && <p className="upload-message error">{evaluateExtractError}</p>}
+          </label>
+          <label className="field">
+            <span>Reference image (optional)</span>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={!supportsImages}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                const file = event.target.files?.[0] ?? null
+                onImageChange(file)
+              }}
+            />
+            {!supportsImages && (
+              <small style={{ color: 'var(--muted)' }}>
+                Image inputs are available when OpenAI is selected in settings.
+              </small>
+            )}
+            {evaluateImage && (
+              <small style={{ color: 'var(--ink)' }}>
+                Selected: {evaluateImage.name}
+              </small>
+            )}
           </label>
         </div>
         <footer className="modal-footer">

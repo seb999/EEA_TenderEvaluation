@@ -2,12 +2,13 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
+import base64
 from datetime import datetime
 from pathlib import Path
 import shutil
 from sqlmodel import Session, select
 from data.createBlankDatabase import create_db_and_tables, get_session
-from models import Applicant, Question, ApplicantAnswer, AssessmentResult, SearchKeyword
+from models import Applicant, Question, ApplicantAnswer, AssessmentResult, SearchKeyword, LLMConfig
 import json
 import openai
 import re
@@ -16,11 +17,14 @@ import fitz
 # Load environment variables from .env file
 load_dotenv()
 
-# LLM client (shared)
-llm_client = openai.OpenAI(
+# LLM clients
+eea_client = openai.OpenAI(
     api_key=os.getenv("EEA_API_KEY"),
     base_url=os.getenv("EEA_BASE_URL")
 )
+
+# Optional OpenAI client (created lazily)
+openai_client = None
 
 # Create uploads directory if it doesn't exist
 UPLOAD_DIR = Path("uploads")
@@ -90,6 +94,27 @@ def _build_prompt(prompt_data: dict, answer_text: str) -> str:
         "Return only the evaluation result in JSON.\n\n"
         f"Prompt JSON:\n{prompt_json}\n\n"
         f"Candidate answer:\n{answer_text}\n"
+    )
+
+def _get_llm_provider(session: Session) -> str:
+    config = session.exec(select(LLMConfig)).first()
+    provider = (config.provider if config else "eea").strip().lower()
+    if provider not in {"eea", "openai"}:
+        return "eea"
+    return provider
+
+def _get_model_for_provider(provider: str) -> tuple[str | None, str]:
+    if provider == "openai":
+        return os.getenv("OPENAI_MODEL"), "OpenAI"
+    return os.getenv("EEA_MODEL"), "EEA In-house LLM"
+
+def _get_openai_client():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return None
+    return openai.OpenAI(
+        api_key=api_key,
+        base_url=os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1"
     )
 
 def _extract_criterion_paragraph(pdf_path: Path, question) -> tuple[str, str] | None:
@@ -212,29 +237,66 @@ async def root():
     return {"message": "Tender Evaluation API is running"}
 
 @app.get("/model")
-async def get_model():
-    """Get the configured EEA LLM model"""
-    eea_model = os.getenv("EEA_MODEL")
+async def get_model(session: Session = Depends(get_session)):
+    """Get the configured LLM model"""
+    provider = _get_llm_provider(session)
+    model_name, provider_label = _get_model_for_provider(provider)
 
-    if not eea_model:
-        return {"error": "EEA_MODEL not configured"}, 404
+    if not model_name:
+        return {"error": f"{provider_label} model not configured"}, 404
 
     return {
-        "model": eea_model,
-        "provider": "EEA In-house LLM"
+        "model": model_name,
+        "provider": provider_label,
+        "supports_images": provider == "openai"
     }
+
+@app.get("/llm-config")
+async def get_llm_config(session: Session = Depends(get_session)):
+    """Get current LLM provider configuration"""
+    provider = _get_llm_provider(session)
+    model_name, provider_label = _get_model_for_provider(provider)
+
+    return {
+        "provider": provider,
+        "provider_label": provider_label,
+        "model": model_name,
+        "supports_images": provider == "openai"
+    }
+
+@app.put("/llm-config")
+async def update_llm_config(
+    provider: str = Form(...),
+    session: Session = Depends(get_session)
+):
+    """Update LLM provider configuration"""
+    normalized = provider.strip().lower()
+    if normalized not in {"eea", "openai"}:
+        raise HTTPException(status_code=400, detail="Invalid provider")
+
+    existing = session.exec(select(LLMConfig)).first()
+    if existing:
+        existing.provider = normalized
+        session.add(existing)
+    else:
+        session.add(LLMConfig(provider=normalized))
+
+    session.commit()
+    return {"provider": normalized}
 
 @app.post("/evaluate")
 async def evaluate_answer(
     applicant_id: int = Form(...),
     q_id: str = Form(...),
     answer_text: str = Form(...),
+    image: UploadFile | None = File(None),
     session: Session = Depends(get_session)
 ):
     """Evaluate a candidate answer using the question prompt stored in the database."""
-    model_name = os.getenv("EEA_MODEL")
+    provider = _get_llm_provider(session)
+    model_name, provider_label = _get_model_for_provider(provider)
     if not model_name:
-        raise HTTPException(status_code=500, detail="EEA_MODEL not configured")
+        raise HTTPException(status_code=500, detail=f"{provider_label} model not configured")
 
     applicant = session.get(Applicant, applicant_id)
     if not applicant:
@@ -258,11 +320,40 @@ async def evaluate_answer(
     )
 
     try:
-        response = llm_client.chat.completions.create(
-            model=model_name,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0
-        )
+        if provider == "openai":
+            client = _get_openai_client()
+            if not client:
+                raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
+
+            message_content = [{"type": "text", "text": prompt}]
+            if image:
+                allowed_types = {"image/png", "image/jpeg", "image/webp"}
+                if image.content_type not in allowed_types:
+                    raise HTTPException(status_code=400, detail="Only PNG, JPEG, or WEBP images are supported")
+                image_bytes = await image.read()
+                if not image_bytes:
+                    raise HTTPException(status_code=400, detail="Empty image upload")
+                encoded = base64.b64encode(image_bytes).decode("ascii")
+                message_content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{image.content_type};base64,{encoded}"}
+                })
+
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": message_content}],
+                temperature=0
+            )
+        else:
+            if image:
+                raise HTTPException(status_code=400, detail="Image input is only supported with OpenAI")
+            response = eea_client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0
+            )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"LLM request failed: {str(e)}")
 

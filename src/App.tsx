@@ -28,9 +28,11 @@ function App() {
   const [evaluateApplicantId, setEvaluateApplicantId] = useState<number | null>(null)
   const [evaluateQuestion, setEvaluateQuestion] = useState('')
   const [evaluateAnswer, setEvaluateAnswer] = useState('')
+  const [evaluateImage, setEvaluateImage] = useState<File | null>(null)
   const [evaluateStatus, setEvaluateStatus] = useState<'idle' | 'loading'>('idle')
   const [evaluateExtracting, setEvaluateExtracting] = useState(false)
   const [evaluateExtractError, setEvaluateExtractError] = useState('')
+  const [supportsImages, setSupportsImages] = useState(false)
   const [selectedApplicantId, setSelectedApplicantId] = useState<number | null>(null)
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null)
   const [showWorkflowInfo, setShowWorkflowInfo] = useState(false)
@@ -164,6 +166,7 @@ function App() {
     setEvaluateVendor(vendor)
     setEvaluateQuestion('')
     setEvaluateAnswer('')
+    setEvaluateImage(null)
     setEvaluateApplicantId(applicantId)
     setIsEvaluateOpen(true)
     setEvaluateExtractError('')
@@ -173,6 +176,7 @@ function App() {
     if (evaluateStatus === 'loading') {
       return
     }
+    setEvaluateImage(null)
     setIsEvaluateOpen(false)
   }
 
@@ -209,11 +213,18 @@ function App() {
       alert('Please select a question and paste the answer.')
       return
     }
+    if (evaluateImage && !supportsImages) {
+      alert('Image inputs are only supported when OpenAI is selected.')
+      return
+    }
 
     const formData = new FormData()
     formData.append('applicant_id', String(evaluateApplicantId))
     formData.append('q_id', evaluateQuestion)
     formData.append('answer_text', evaluateAnswer.trim())
+    if (evaluateImage) {
+      formData.append('image', evaluateImage)
+    }
 
     try {
       setEvaluateStatus('loading')
@@ -259,11 +270,13 @@ function App() {
         if (isMounted) {
           setModelLabel(label)
           setModelStatus('ready')
+          setSupportsImages(Boolean(data?.supports_images))
         }
       } catch (error) {
         if (isMounted) {
           setModelLabel('Model unavailable')
           setModelStatus('error')
+          setSupportsImages(false)
         }
       }
     }
@@ -396,6 +409,10 @@ function App() {
     document.getElementById('file-input')?.click()
   }
 
+  const handleImageSelect = (file: File | null) => {
+    setEvaluateImage(file)
+  }
+
   const selectedApplicant = uploads.find((upload) => upload.id === selectedApplicantId) ?? null
 
   if (currentView === 'settings') {
@@ -458,15 +475,18 @@ function App() {
           questions={questions}
           evaluateQuestion={evaluateQuestion}
           evaluateAnswer={evaluateAnswer}
+          evaluateImage={evaluateImage}
           evaluateStatus={evaluateStatus}
           evaluateExtracting={evaluateExtracting}
           evaluateExtractError={evaluateExtractError}
+          supportsImages={supportsImages}
           showWorkflowInfo={showWorkflowInfo}
           onToggleWorkflowInfo={() => setShowWorkflowInfo(!showWorkflowInfo)}
           onClose={handleCloseEvaluate}
           onQuestionChange={handleQuestionChange}
           onAnswerChange={setEvaluateAnswer}
           onAnswerBlur={handleAnswerBlur}
+          onImageChange={handleImageSelect}
           onRunEvaluation={handleRunEvaluation}
         />
       )}

@@ -121,5 +121,11 @@ class SearchKeyword(SQLModel, table=True):
             "example": {
                 "keyword": "Criterion",
                 "is_active": True
-            }
         }
+    }
+
+
+class LLMConfig(SQLModel, table=True):
+    """Stores LLM provider selection"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    provider: str = Field(default="eea")  # "eea" or "openai"
