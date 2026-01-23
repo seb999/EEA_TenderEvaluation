@@ -1,0 +1,67 @@
+[
+  {
+    "q_id": "2",
+    "prompt_json": {
+      "question": "Explain how you organise, govern, and scale your team to deliver services effectively over the framework duration, ensuring clear governance, collaboration with the EEA, and service continuity.",
+      "scale": "0-5",
+      "required_evidence": [
+        "team structure and governance",
+        "roles and decision-making lines",
+        "knowledge and staff continuity measures",
+        "scalability of resources",
+        "performance management approach",
+        "coordination and communication with the EEA",
+        "concrete examples from large IT projects"
+      ],
+      "evaluation_guidance": [
+        "Score higher answers that are specific, structured, and evidenced",
+        "Penalise generic or high-level statements",
+        "Do not infer missing information",
+        "Concrete examples significantly increase the score",
+        "If several required evidence elements are missing, the score should be low"
+      ],
+      "output_format": {
+        "score": "integer 0-5",
+        "justification": "brief explanation of the score",
+        "missing_evidence": "list of missing or weak elements"
+      }
+    },
+    "is_active": true,
+    "search_label": "Team Management and Delivery Governance",
+    "auto_increment": false
+  },
+  {
+    "q_id": "3",
+    "prompt_json": {
+      "question": "Describe your approach to designing and operating robust data integration pipelines and external system interfaces, enabling reliable and secure ingestion, transformation, and dissemination of environmental data in diverse formats and frequencies.",
+      "scale": "0-5",
+      "required_evidence": [
+        "integration architecture and design principles",
+        "handling of multiple APIs, ETL processes, and complex data streams",
+        "dataflow management including near real-time ingestion and latency handling",
+        "data-loss prevention and reliability mechanisms",
+        "interoperability strategies for geospatial, IoT, and satellite data",
+        "API maintenance including versioning, schema evolution, and backward compatibility",
+        "tooling and automation (e.g. FME, API gateways, dataflow monitoring dashboards)",
+        "concrete examples of large-scale or complex data integration implementations"
+      ],
+      "weight": 2,
+      "evaluation_guidance": [
+        "Score higher responses that describe a coherent, robust, and scalable integration architecture",
+        "Reward concrete technical detail over high-level descriptions",
+        "Modern tooling, automation, and monitoring should positively influence the score",
+        "Examples demonstrating large-scale, heterogeneous, or high-volume dataflows significantly increase the score",
+        "Penalise vague claims, lack of operational detail, or absence of real-world examples",
+        "Do not infer capabilities that are not explicitly stated in the response"
+      ],
+      "output_format": {
+        "score": "integer 0-5",
+        "justification": "brief explanation referencing robustness, efficiency, and evidence",
+        "missing_evidence": "list of required evidence elements not found or insufficiently addressed"
+      }
+    },
+    "is_active": true,
+    "search_label": "External Integration and Dataflows",
+    "auto_increment": false
+  }
+]

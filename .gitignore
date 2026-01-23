@@ -30,9 +30,10 @@ __pycache__/
 service/uploads/*.pdf
 
 # Database
-service/data/
-*.db
-!service/data/questions_seed.json
+service/data/*.db
+!service/data/
+!service/data/*.py
+!service/data/*.json
 
 # Editor directories and files
 .idea
