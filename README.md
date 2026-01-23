@@ -1,5 +1,27 @@
 # React + TypeScript + Vite
 
+## Docker
+
+Build images:
+
+```bash
+docker compose build
+```
+
+Run frontend + backend:
+
+```bash
+docker compose up
+```
+
+Endpoints:
+- Frontend: http://localhost:5173
+- Backend: http://localhost:8000
+
+Notes:
+- Backend reads environment from `service/.env`.
+- To rebuild after changes, rerun `docker compose build`.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
