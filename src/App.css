@@ -3,6 +3,7 @@
   gap: 2rem;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   padding: 2.5rem 2.75rem 3.5rem;
+  align-items: start;
 }
 
 .app.settings-view {
@@ -392,6 +393,7 @@ button:active {
   display: grid;
   grid-template-columns: minmax(200px, 260px) 1fr;
   gap: 1.5rem;
+  align-items: start;
 }
 
 .modal-overlay {
@@ -752,6 +754,11 @@ button:active {
   font-size: 0.8rem;
   color: var(--muted);
   margin: 0.75rem 0 1rem;
+}
+
+.question-search-label {
+  color: #1e5b8f;
+  font-weight: 600;
 }
 
 .pill.secondary {

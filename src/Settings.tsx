@@ -350,7 +350,7 @@ function Settings() {
             {questions.map((q) => (
               <div className="question-item" key={q.id}>
                 <div className="question-header">
-                  <h3>{q.q_id}</h3>
+                  <h3>Question {q.q_id}</h3>
                   <span className={`pill ${q.is_active ? 'success' : 'secondary'}`}>
                     {q.is_active ? 'Active' : 'Inactive'}
                   </span>
@@ -359,6 +359,11 @@ function Settings() {
                 <div className="question-meta">
                   <span>Scale: {q.prompt_json.scale}</span>
                   <span>Evidence items: {q.prompt_json.required_evidence?.length || 0}</span>
+                </div>
+                <div className="question-meta">
+                  <span className="question-search-label">
+                    <strong>PDF Search Label:</strong> {q.search_label || 'Any'}
+                  </span>
                 </div>
                 <div className="button-group">
                   <button className="secondary" onClick={() => handleEdit(q)}>
