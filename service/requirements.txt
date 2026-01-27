@@ -8,3 +8,4 @@ pypdf
 debugpy
 alembic
 Pillow
+python-multipart

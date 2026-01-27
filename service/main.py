@@ -8,13 +8,15 @@ from pathlib import Path
 import shutil
 from typing import Optional
 from sqlmodel import Session, select
-from data.createBlankDatabase import create_db_and_tables, get_session
+from data.createBlankDatabase import create_db_and_tables, get_session, engine
 from models import Applicant, Question, ApplicantAnswer, AssessmentResult, SearchKeyword, LLMConfig, PDFOCRCache
 import json
 import openai
 import re
 import fitz
 from ocr_utils import extract_text_hybrid, get_page_hash
+import subprocess
+import sys
 
 # Load environment variables from .env file
 load_dotenv()
@@ -51,6 +53,31 @@ app.add_middleware(
 def on_startup():
     """Initialize database on application startup"""
     create_db_and_tables()
+
+    # Check if Question table is empty and seed if needed
+    with Session(engine) as session:
+        existing_questions = session.exec(select(Question).limit(1)).first()
+
+        if not existing_questions:
+            print("Database is empty. Seeding questions from questions_seed.json...")
+            seed_script = Path(__file__).parent / "data" / "seed_questions.py"
+            seed_file = Path(__file__).parent / "data" / "questions_seed.json"
+
+            if seed_script.exists() and seed_file.exists():
+                try:
+                    # Run the seed script
+                    result = subprocess.run(
+                        [sys.executable, str(seed_script), "--import", str(seed_file)],
+                        capture_output=True,
+                        text=True,
+                        check=True
+                    )
+                    print(result.stdout)
+                    print("Database seeded successfully!")
+                except subprocess.CalledProcessError as e:
+                    print(f"Warning: Failed to seed database: {e.stderr}")
+            else:
+                print(f"Warning: Seed script or data file not found at {seed_script} or {seed_file}")
 
 def _extract_json_payload(content: str):
     content = content.strip()

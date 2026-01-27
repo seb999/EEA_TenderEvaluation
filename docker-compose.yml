@@ -8,6 +8,11 @@ services:
       - ./service/.env
     ports:
       - "8000:8000"
+    volumes:
+      # Persist database
+      - ./service/data:/app/data
+      # Persist uploaded PDFs
+      - ./service/uploads:/app/uploads
 
   frontend:
     build:

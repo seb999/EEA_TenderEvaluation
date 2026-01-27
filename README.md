@@ -1,5 +1,20 @@
 # React + TypeScript + Vite
 
+## Manual installation
+BACKEND
+cd service
+python -m venv venv
+venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+FRONTEND
+npm install
+npm run dev
+
+.ENV
+create .env and copy the content from dev machine
+
+
 ## Docker
 
 Build images:
