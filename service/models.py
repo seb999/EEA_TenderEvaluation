@@ -129,3 +129,27 @@ class LLMConfig(SQLModel, table=True):
     """Stores LLM provider selection"""
     id: Optional[int] = Field(default=None, primary_key=True)
     provider: str = Field(default="eea")  # "eea" or "openai"
+
+
+class PDFOCRCache(SQLModel, table=True):
+    """Cache for OCR-extracted text from scanned PDFs"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    page_hash: str = Field(index=True, unique=True)  # SHA256 hash of file path + page number
+    pdf_path: str  # Path to the PDF file
+    page_num: int  # Page number (0-indexed)
+    extracted_text: str  # OCR-extracted text
+    model_used: str  # Model used for OCR (e.g., "gpt-4o")
+    applicant_id: Optional[int] = Field(default=None, foreign_key="applicant.id", index=True)  # Reference to applicant
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "page_hash": "a1b2c3d4e5f6...",
+                "pdf_path": "uploads/Candidate123.pdf",
+                "page_num": 0,
+                "extracted_text": "2. Team Management and Delivery Governance...",
+                "model_used": "gpt-4o",
+                "applicant_id": 1
+            }
+        }

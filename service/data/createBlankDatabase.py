@@ -1,7 +1,7 @@
 from pathlib import Path
 from sqlmodel import SQLModel, create_engine, Session
 
-from models import Applicant, Question, ApplicantAnswer, AssessmentResult, SearchKeyword
+from models import Applicant, Question, ApplicantAnswer, AssessmentResult, SearchKeyword, LLMConfig, PDFOCRCache
 
 DATABASE_DIR = Path(__file__).resolve().parent
 DATABASE_DIR.mkdir(exist_ok=True)

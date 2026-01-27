@@ -7,3 +7,4 @@ pymupdf
 pypdf
 debugpy
 alembic
+Pillow

@@ -6,13 +6,15 @@ import base64
 from datetime import datetime
 from pathlib import Path
 import shutil
+from typing import Optional
 from sqlmodel import Session, select
 from data.createBlankDatabase import create_db_and_tables, get_session
-from models import Applicant, Question, ApplicantAnswer, AssessmentResult, SearchKeyword, LLMConfig
+from models import Applicant, Question, ApplicantAnswer, AssessmentResult, SearchKeyword, LLMConfig, PDFOCRCache
 import json
 import openai
 import re
 import fitz
+from ocr_utils import extract_text_hybrid, get_page_hash
 
 # Load environment variables from .env file
 load_dotenv()
@@ -117,7 +119,7 @@ def _get_openai_client():
         base_url=os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1"
     )
 
-def _extract_criterion_paragraph(pdf_path: Path, question) -> tuple[str, str] | None:
+def _extract_criterion_paragraph(pdf_path: Path, question, session: Session, applicant_id: Optional[int] = None) -> tuple[str, str] | None:
     if not pdf_path.exists():
         return None
 
@@ -178,9 +180,46 @@ def _extract_criterion_paragraph(pdf_path: Path, question) -> tuple[str, str] | 
     header_line = None
     collecting = False
 
+    # Get OpenAI client for potential OCR fallback
+    # NOTE: OCR is independent of the evaluation provider setting
+    # We use OpenAI for OCR (if available) even if EEA is selected for evaluations
+    ocr_client = _get_openai_client()
+    ocr_model = os.getenv("OPENAI_MODEL") or "gpt-4o"
+
     with fitz.open(str(pdf_path)) as doc:
-        for page in doc:
+        for page_num, page in enumerate(doc):
+            # First try standard text extraction
             text = page.get_text("text")
+
+            # If no text found (scanned PDF), use hybrid OCR approach
+            if not text or len(text.strip()) < 50:
+                # Check cache first
+                page_hash = get_page_hash(pdf_path, page_num)
+                cached = session.exec(select(PDFOCRCache).where(PDFOCRCache.page_hash == page_hash)).first()
+
+                if cached:
+                    print(f"Using cached OCR text for page {page_num}")
+                    text = cached.extracted_text
+                elif ocr_client:
+                    print(f"Scanned PDF detected on page {page_num}, using LLM OCR...")
+                    ocr_text, used_ocr = extract_text_hybrid(pdf_path, page_num, ocr_client, ocr_model)
+                    if used_ocr and ocr_text:
+                        text = ocr_text
+                        # Cache the OCR result
+                        cache_entry = PDFOCRCache(
+                            page_hash=page_hash,
+                            pdf_path=str(pdf_path),
+                            page_num=page_num,
+                            extracted_text=ocr_text,
+                            model_used=ocr_model,
+                            applicant_id=applicant_id
+                        )
+                        session.add(cache_entry)
+                        session.commit()
+                        print(f"OCR text cached for future use")
+                else:
+                    print(f"Warning: Scanned PDF detected but OCR not available (OpenAI provider not configured)")
+
             if not text:
                 continue
 
@@ -245,10 +284,14 @@ async def get_model(session: Session = Depends(get_session)):
     if not model_name:
         return {"error": f"{provider_label} model not configured"}, 404
 
+    # Check if OCR is available (independent of evaluation provider)
+    ocr_available = _get_openai_client() is not None
+
     return {
         "model": model_name,
         "provider": provider_label,
-        "supports_images": provider == "openai"
+        "supports_images": provider == "openai",
+        "ocr_available": ocr_available
     }
 
 @app.get("/llm-config")
@@ -257,11 +300,16 @@ async def get_llm_config(session: Session = Depends(get_session)):
     provider = _get_llm_provider(session)
     model_name, provider_label = _get_model_for_provider(provider)
 
+    # Check if OCR is available (OpenAI credentials configured)
+    ocr_available = _get_openai_client() is not None
+
     return {
         "provider": provider,
         "provider_label": provider_label,
         "model": model_name,
-        "supports_images": provider == "openai"
+        "supports_images": provider == "openai",
+        "ocr_available": ocr_available,
+        "ocr_note": "OCR for scanned PDFs requires OpenAI API key" if not ocr_available else "OCR enabled for scanned PDFs"
     }
 
 @app.put("/llm-config")
@@ -483,7 +531,7 @@ async def extract_answer_paragraph(
     if not file_path.is_absolute():
         file_path = Path(__file__).resolve().parent / file_path
 
-    extracted = _extract_criterion_paragraph(file_path, question)
+    extracted = _extract_criterion_paragraph(file_path, question, session, applicant_id)
     if not extracted:
         search_pattern = question.search_label
         if question.auto_increment:

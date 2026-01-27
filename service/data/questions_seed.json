@@ -45,7 +45,6 @@
         "tooling and automation (e.g. FME, API gateways, dataflow monitoring dashboards)",
         "concrete examples of large-scale or complex data integration implementations"
       ],
-      "weight": 2,
       "evaluation_guidance": [
         "Score higher responses that describe a coherent, robust, and scalable integration architecture",
         "Reward concrete technical detail over high-level descriptions",
@@ -62,6 +61,23 @@
     },
     "is_active": true,
     "search_label": "External Integration and Dataflows",
+    "auto_increment": false
+  },
+  {
+    "q_id": "4",
+    "prompt_json": {
+      "question": "",
+      "scale": "",
+      "required_evidence": [],
+      "evaluation_guidance": [],
+      "output_format": {
+        "score": "",
+        "justification": "",
+        "missing_evidence": ""
+      }
+    },
+    "is_active": true,
+    "search_label": "Service and Operations Management",
     "auto_increment": false
   }
 ]
