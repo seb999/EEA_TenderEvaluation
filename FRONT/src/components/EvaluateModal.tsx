@@ -159,8 +159,46 @@ function EvaluateModal({
               placeholder="Paste the answer from the proposal or click 'Auto Extract'"
               rows={10}
             />
-            {evaluateExtracting && <p className="upload-message uploading">Extracting proposal answer...</p>}
+            {evaluateExtracting && (
+              <div style={{ marginTop: '12px' }}>
+                <p className="upload-message uploading" style={{ marginBottom: '8px' }}>
+                  Extracting proposal answer...
+                </p>
+                <div
+                  style={{
+                    width: '100%',
+                    height: '4px',
+                    backgroundColor: '#e0e0e0',
+                    borderRadius: '2px',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      backgroundColor: '#0066cc',
+                      animation: 'progressBar 1.5s ease-in-out infinite',
+                      transformOrigin: 'left',
+                    }}
+                  />
+                </div>
+              </div>
+            )}
             {evaluateExtractError && <p className="upload-message error">{evaluateExtractError}</p>}
+            <style>{`
+              @keyframes progressBar {
+                0% {
+                  transform: scaleX(0);
+                }
+                50% {
+                  transform: scaleX(0.7);
+                }
+                100% {
+                  transform: scaleX(1);
+                }
+              }
+            `}</style>
           </label>
           <label className="field">
             <span>Reference image (optional)</span>

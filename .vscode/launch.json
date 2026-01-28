@@ -14,10 +14,10 @@
         "--port",
         "8000"
       ],
-      "cwd": "${workspaceFolder}/service",
-      "python": "${workspaceFolder}/service/venv/Scripts/python.exe",
+      "cwd": "${workspaceFolder}/BACK",
+      "python": "${workspaceFolder}/BACK/venv/Scripts/python.exe",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/service"
+        "PYTHONPATH": "${workspaceFolder}/BACK"
       },
       "console": "integratedTerminal",
       "justMyCode": true
@@ -28,7 +28,7 @@
       "request": "launch",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "cwd": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}/FRONT",
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen",
       "serverReadyAction": {

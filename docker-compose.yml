@@ -3,20 +3,20 @@ version: "3.9"
 services:
   backend:
     build:
-      context: ./service
+      context: ./BACK
     env_file:
-      - ./service/.env
+      - ./BACK/.env
     ports:
       - "8000:8000"
     volumes:
       # Persist database
-      - ./service/data:/app/data
+      - ./BACK/data:/app/data
       # Persist uploaded PDFs
-      - ./service/uploads:/app/uploads
+      - ./BACK/uploads:/app/uploads
 
   frontend:
     build:
-      context: .
+      context: ./FRONT
     ports:
       - "5173:5173"
     depends_on:

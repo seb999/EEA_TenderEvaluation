@@ -2,17 +2,18 @@
 
 ## Manual installation
 BACKEND
-cd service
+cd BACK
 python -m venv venv
 venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
 FRONTEND
+cd FRONT
 npm install
 npm run dev
 
 .ENV
-create .env and copy the content from dev machine
+create .env in BACK folder and copy the content from dev machine
 
 
 ## Docker
@@ -34,14 +35,14 @@ Endpoints:
 - Backend: http://localhost:8000
 
 Notes:
-- Backend reads environment from `service/.env`.
+- Backend reads environment from `BACK/.env`.
 - To rebuild after changes, rerun `docker compose build`.
-- The question seed file is `service/data/questions_seed.json`.
+- The question seed file is `BACK/data/questions_seed.json`.
 
 Import questions into a blank DB:
 
 ```bash
-python service/data/import_questions.py service/data/questions_seed.json
+python BACK/data/import_questions.py BACK/data/questions_seed.json
 ```
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

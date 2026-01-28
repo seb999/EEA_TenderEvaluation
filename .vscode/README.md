@@ -27,8 +27,8 @@ Access these via the Run and Debug panel (Ctrl+Shift+D) or F5:
 
 Access these via Terminal > Run Task or Ctrl+Shift+B:
 
-- **Install Python Dependencies** - Installs packages from `service/requirements.txt`
-- **Install Node Dependencies** - Runs `npm install`
+- **Install Python Dependencies** - Installs packages from `BACK/requirements.txt`
+- **Install Node Dependencies** - Runs `npm install` in FRONT folder
 - **Start Python Service** - Starts FastAPI backend (non-debug mode)
 - **Start React Dev Server** - Starts Vite dev server (non-debug mode)
 - **Start Full Stack** - Starts both services (non-debug mode)
@@ -37,7 +37,7 @@ Access these via Terminal > Run Task or Ctrl+Shift+B:
 
 1. **First time setup:**
    - Press `Ctrl+Shift+P` and run "Python: Select Interpreter"
-   - Choose the interpreter at `service/venv/Scripts/python.exe`
+   - Choose the interpreter at `BACK/venv/Scripts/python.exe`
    - Install recommended extensions when prompted
 
 2. **Start development:**

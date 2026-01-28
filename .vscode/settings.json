@@ -1,6 +1,6 @@
 {
   // Python settings
-  "python.defaultInterpreterPath": "${workspaceFolder}/service/venv/Scripts/python.exe",
+  "python.defaultInterpreterPath": "${workspaceFolder}/BACK/venv/Scripts/python.exe",
   "python.terminal.activateEnvironment": true,
   "python.analysis.extraPaths": ["${workspaceFolder}/service"],
 

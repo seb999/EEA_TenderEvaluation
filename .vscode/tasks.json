@@ -4,10 +4,10 @@
     {
       "label": "Install Python Dependencies",
       "type": "shell",
-      "command": "${workspaceFolder}/service/venv/Scripts/pip",
+      "command": "${workspaceFolder}/BACK/venv/Scripts/pip",
       "args": ["install", "-r", "requirements.txt"],
       "options": {
-        "cwd": "${workspaceFolder}/service"
+        "cwd": "${workspaceFolder}/BACK"
       },
       "problemMatcher": [],
       "group": "none"
@@ -16,16 +16,19 @@
       "label": "Install Node Dependencies",
       "type": "npm",
       "script": "install",
+      "options": {
+        "cwd": "${workspaceFolder}/FRONT"
+      },
       "problemMatcher": [],
       "group": "none"
     },
     {
       "label": "Start Python Service",
       "type": "shell",
-      "command": "${workspaceFolder}/service/venv/Scripts/python",
+      "command": "${workspaceFolder}/BACK/venv/Scripts/python",
       "args": ["-m", "uvicorn", "main:app", "--reload", "--host", "127.0.0.1", "--port", "8000"],
       "options": {
-        "cwd": "${workspaceFolder}/service"
+        "cwd": "${workspaceFolder}/BACK"
       },
       "problemMatcher": [],
       "isBackground": true,
@@ -38,6 +41,9 @@
       "label": "Start React Dev Server",
       "type": "npm",
       "script": "dev",
+      "options": {
+        "cwd": "${workspaceFolder}/FRONT"
+      },
       "problemMatcher": [],
       "isBackground": true,
       "presentation": {

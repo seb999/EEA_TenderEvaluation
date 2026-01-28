@@ -27,13 +27,13 @@ __pycache__/
 .env.local
 
 # Uploads
-service/uploads/*.pdf
+BACK/uploads/*.pdf
 
 # Database
-service/data/*.db
-!service/data/
-!service/data/*.py
-!service/data/*.json
+BACK/data/*.db
+!BACK/data/
+!BACK/data/*.py
+!BACK/data/*.json
 
 # Editor directories and files
 .idea

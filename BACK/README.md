@@ -87,7 +87,7 @@ The service uses SQLite database to store applicant information.
 
 ### Database Location
 
-The database file is automatically created at: `service/data/tender_evaluation.db`
+The database file is automatically created at: `data/tender_evaluation.db`
 
 ### Migrating Existing Files
 
