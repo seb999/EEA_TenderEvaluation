@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field, Column
-from sqlalchemy import JSON
+from sqlalchemy import JSON, ForeignKey
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 import json
@@ -63,7 +63,7 @@ class Question(SQLModel, table=True):
 class ApplicantAnswer(SQLModel, table=True):
     """Stores applicant answers to specific questions"""
     id: Optional[int] = Field(default=None, primary_key=True)
-    applicant_id: int = Field(foreign_key="applicant.id", index=True)
+    applicant_id: int = Field(sa_column=Column("applicant_id", ForeignKey("applicant.id", ondelete="CASCADE"), index=True))
     q_id: str = Field(index=True)  # Question ID (e.g., "Q2")
     answer_text: str  # The actual answer content
     source: str = Field(default="extracted")  # "extracted" or "manual"
@@ -84,7 +84,7 @@ class ApplicantAnswer(SQLModel, table=True):
 class AssessmentResult(SQLModel, table=True):
     """Stores LLM assessment results for applicant answers"""
     id: Optional[int] = Field(default=None, primary_key=True)
-    applicant_id: int = Field(foreign_key="applicant.id", index=True)
+    applicant_id: int = Field(sa_column=Column("applicant_id", ForeignKey("applicant.id", ondelete="CASCADE"), index=True))
     q_id: str = Field(index=True)  # Question ID (e.g., "Q2")
     question_text: str  # The actual question text
     answer_text: str  # The answer that was evaluated
@@ -139,7 +139,7 @@ class PDFOCRCache(SQLModel, table=True):
     page_num: int  # Page number (0-indexed)
     extracted_text: str  # OCR-extracted text
     model_used: str  # Model used for OCR (e.g., "gpt-4o")
-    applicant_id: Optional[int] = Field(default=None, foreign_key="applicant.id", index=True)  # Reference to applicant
+    applicant_id: Optional[int] = Field(default=None, sa_column=Column("applicant_id", ForeignKey("applicant.id", ondelete="CASCADE"), index=True, nullable=True))  # Reference to applicant
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Config:

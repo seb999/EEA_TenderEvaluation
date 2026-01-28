@@ -150,7 +150,7 @@ Preserve line breaks and spacing."""
                 ]
             }],
             temperature=0,
-            max_tokens=4096
+            max_completion_tokens=4096
         )
 
         extracted_text = response.choices[0].message.content

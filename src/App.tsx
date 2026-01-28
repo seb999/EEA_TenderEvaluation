@@ -195,10 +195,31 @@ function App() {
     }
   }
 
-  const handleQuestionChange = (qId: string) => {
+  const handleQuestionChange = async (qId: string) => {
     setEvaluateQuestion(qId)
+    setEvaluateAnswer('')
+    setEvaluateExtractError('')
+
+    // Only check if an answer is already stored in DB, don't auto-extract
     if (evaluateApplicantId) {
-      fetchCriterionAnswer(evaluateApplicantId, qId)
+      try {
+        const dbResponse = await fetch(`http://localhost:8000/applicant-answer/${evaluateApplicantId}/${qId}`)
+
+        if (dbResponse.ok) {
+          const dbData = await dbResponse.json()
+          if (dbData.answer && dbData.answer.answer_text) {
+            setEvaluateAnswer(dbData.answer.answer_text)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load saved answer:', error)
+      }
+    }
+  }
+
+  const handleAutoExtract = () => {
+    if (evaluateApplicantId && evaluateQuestion) {
+      fetchCriterionAnswer(evaluateApplicantId, evaluateQuestion)
     }
   }
 
@@ -252,43 +273,40 @@ function App() {
     }
   }
 
-  useEffect(() => {
-    let isMounted = true
-
-    const loadModel = async () => {
-      try {
-        const response = await fetch('http://localhost:8000/model')
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`)
-        }
-        const data = await response.json()
-        const label =
-          typeof data === 'string'
-            ? data
-            : data?.model ?? data?.name ?? data?.id ?? 'Unknown model'
-
-        if (isMounted) {
-          setModelLabel(label)
-          setModelStatus('ready')
-          setSupportsImages(Boolean(data?.supports_images))
-        }
-      } catch (error) {
-        if (isMounted) {
-          setModelLabel('Model unavailable')
-          setModelStatus('error')
-          setSupportsImages(false)
-        }
+  const loadModel = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/model')
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
       }
-    }
+      const data = await response.json()
+      const label =
+        typeof data === 'string'
+          ? data
+          : data?.model ?? data?.name ?? data?.id ?? 'Unknown model'
 
+      setModelLabel(label)
+      setModelStatus('ready')
+      setSupportsImages(Boolean(data?.supports_images))
+    } catch (error) {
+      setModelLabel('Model unavailable')
+      setModelStatus('error')
+      setSupportsImages(false)
+    }
+  }
+
+  useEffect(() => {
     loadModel()
     loadUploads()
     loadQuestions()
-
-    return () => {
-      isMounted = false
-    }
   }, [])
+
+  // Reload model config when returning from settings
+  useEffect(() => {
+    if (currentView === 'main') {
+      loadModel()
+    }
+  }, [currentView])
 
   useEffect(() => {
     if (!uploads.length) {
@@ -488,6 +506,7 @@ function App() {
           onAnswerBlur={handleAnswerBlur}
           onImageChange={handleImageSelect}
           onRunEvaluation={handleRunEvaluation}
+          onAutoExtract={handleAutoExtract}
         />
       )}
 

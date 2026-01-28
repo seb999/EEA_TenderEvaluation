@@ -23,7 +23,14 @@ export type Upload = {
 export type Question = {
   id: number
   q_id: string
-  prompt_json: Record<string, unknown>
+  prompt_json: {
+    question?: string
+    scale?: string
+    required_evidence?: string[]
+    evaluation_guidance?: string[]
+    output_format?: Record<string, string>
+    weight?: number
+  }
 }
 
 export type AssessmentResult = {
