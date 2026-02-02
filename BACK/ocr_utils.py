@@ -85,16 +85,47 @@ def pdf_page_to_image(pdf_path: Path, page_num: int = 0, dpi: int = 200) -> Opti
 def get_page_hash(pdf_path: Path, page_num: int) -> str:
     """
     Generate a hash for a PDF page to use as cache key.
+    Uses the actual page content to ensure different PDFs with same filename
+    get different cache entries.
 
     Args:
         pdf_path: Path to the PDF file
         page_num: Page number
 
     Returns:
-        SHA256 hash of the PDF file path and page number
+        SHA256 hash of the PDF page content
     """
-    cache_string = f"{pdf_path.absolute()}:{page_num}"
-    return hashlib.sha256(cache_string.encode()).hexdigest()
+    try:
+        with fitz.open(str(pdf_path)) as doc:
+            if page_num >= len(doc):
+                # Fallback for invalid page number
+                return hashlib.sha256(f"{pdf_path.absolute()}:{page_num}:invalid".encode()).hexdigest()
+
+            page = doc[page_num]
+
+            # Get the raw page content (text + image data)
+            # This creates a unique fingerprint based on actual content
+            page_text = page.get_text("text")
+
+            # Get image blocks to include in hash
+            text_dict = page.get_text("dict")
+            blocks = text_dict.get("blocks", [])
+            image_hashes = []
+
+            for block in blocks:
+                if block.get("type") == 1:  # Image block
+                    # Include image dimensions and position as part of hash
+                    img_info = f"{block.get('bbox')}:{block.get('width')}:{block.get('height')}"
+                    image_hashes.append(img_info)
+
+            # Combine text content and image structure for unique hash
+            content_string = f"{page_text}:{'|'.join(image_hashes)}:{page_num}"
+            return hashlib.sha256(content_string.encode()).hexdigest()
+
+    except Exception as e:
+        print(f"Error generating page hash: {e}")
+        # Fallback to path-based hash with error marker
+        return hashlib.sha256(f"{pdf_path.absolute()}:{page_num}:error".encode()).hexdigest()
 
 
 def llm_ocr_page(
