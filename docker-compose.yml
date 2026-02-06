@@ -13,6 +13,7 @@ services:
       - ./BACK/data:/app/data
       # Persist uploaded PDFs
       - ./BACK/uploads:/app/uploads
+    restart: unless-stopped
 
   frontend:
     build:
@@ -21,3 +22,4 @@ services:
       - "5173:5173"
     depends_on:
       - backend
+    restart: unless-stopped

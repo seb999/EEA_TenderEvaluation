@@ -1,9 +1,14 @@
 .app {
   display: grid;
   gap: 2rem;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: 1fr 2fr;
   padding: 2.5rem 2.75rem 3.5rem;
   align-items: start;
+  transition: padding-top 0.3s ease;
+}
+
+.app.with-banner {
+  padding-top: 6rem;
 }
 
 .app.settings-view {
@@ -676,6 +681,43 @@ button:active {
   background: rgba(232, 72, 72, 0.12);
   color: #c43c3c;
   border: 1px solid rgba(232, 72, 72, 0.3);
+}
+
+.connection-error-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(135deg, #e84848 0%, #c43c3c 100%);
+  color: #fff;
+  padding: 1rem 2rem;
+  box-shadow: 0 4px 12px rgba(232, 72, 72, 0.3);
+  z-index: 100;
+  animation: slideDown 0.4s ease both;
+  text-align: center;
+}
+
+.connection-error-banner strong {
+  display: block;
+  font-size: 1.1rem;
+  margin-bottom: 0.25rem;
+}
+
+.connection-error-banner p {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.95;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .editor-card {

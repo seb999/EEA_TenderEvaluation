@@ -37,6 +37,24 @@ function App() {
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null)
   const [showWorkflowInfo, setShowWorkflowInfo] = useState(false)
   const [assessmentResults, setAssessmentResults] = useState<AssessmentResult[]>([])
+  const [backendStatus, setBackendStatus] = useState<'connected' | 'disconnected'>('connected')
+
+  const checkBackendConnection = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/model', {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      })
+      if (response.ok) {
+        setBackendStatus('connected')
+      } else {
+        setBackendStatus('disconnected')
+      }
+    } catch (error) {
+      setBackendStatus('disconnected')
+      console.warn('Backend connection check failed:', error)
+    }
+  }
 
   const loadUploads = async () => {
     try {
@@ -299,6 +317,16 @@ function App() {
     loadModel()
     loadUploads()
     loadQuestions()
+    checkBackendConnection()
+  }, [])
+
+  // Check backend connection periodically (every 30 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkBackendConnection()
+    }, 30000) // 30 seconds
+
+    return () => clearInterval(interval)
   }, [])
 
   // Reload model config when returning from settings
@@ -447,8 +475,16 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <section className="panel">
+    <>
+      {backendStatus === 'disconnected' && (
+        <div className="connection-error-banner">
+          <strong>⚠️ Backend service is unavailable</strong>
+          <p>The application cannot connect to the backend service. Please contact your administrator or wait for the service to restart.</p>
+        </div>
+      )}
+
+      <div className={`app ${backendStatus === 'disconnected' ? 'with-banner' : ''}`}>
+        <section className="panel">
         <header className="panel-header">
           <div>
             <p className="eyebrow">Tender Evaluator</p>
@@ -516,7 +552,8 @@ function App() {
         selectedQuestionId={selectedQuestionId}
         onSelectQuestion={(qId) => setSelectedQuestionId(qId)}
       />
-    </div>
+      </div>
+    </>
   )
 }
 
